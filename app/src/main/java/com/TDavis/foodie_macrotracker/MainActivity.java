@@ -60,6 +60,9 @@ public class MainActivity extends AppCompatActivity {
 
         // Setup RecyclerView for displaying entries
         adapter = new FoodEntryAdapter(entries);
+        // Set a listener to handle long-clicks on list items
+// When triggered, call confirmDelete() with the item position
+        adapter.setOnItemLongClickListener(position -> confirmDelete(position));
         rvEntries.setLayoutManager(new LinearLayoutManager(this));
         rvEntries.setAdapter(adapter);
 
@@ -222,4 +225,39 @@ public class MainActivity extends AppCompatActivity {
         SharedPreferences prefs = getSharedPreferences("FoodiePrefs", MODE_PRIVATE);
         prefs.edit().clear().apply();
     }
+
+    /**
+     * Shows a confirmation dialog before deleting a food entry.
+     * If confirmed, updates totals, removes the entry from the list,
+     * refreshes the RecyclerView, and saves the changes.
+     */
+    private void confirmDelete(int position) {
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Delete entry?") // Dialog title
+                .setMessage("Remove this food from today?") // Dialog message
+                .setPositiveButton("Delete", (dialog, which) -> {
+                    // Get the entry to be deleted
+                    FoodEntry e = entries.get(position);
+
+                    // Subtract its nutritional values from totals
+                    totalCalories -= e.calories;
+                    totalProtein  -= e.protein;
+                    totalCarbs    -= e.carbs;
+                    totalFat      -= e.fat;
+
+                    // Remove from the list
+                    entries.remove(position);
+
+                    // Update RecyclerView
+                    adapter.notifyItemRemoved(position);
+
+                    // Refresh totals display and save updated data
+                    updateTotalsText();
+                    saveData();
+                })
+                // If canceled, do nothing
+                .setNegativeButton("Cancel", null)
+                .show(); // Display the dialog
+    }
+
 }
