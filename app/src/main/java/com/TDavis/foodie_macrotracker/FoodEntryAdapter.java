@@ -17,6 +17,19 @@ public class FoodEntryAdapter extends RecyclerView.Adapter<FoodEntryAdapter.View
 
     // List of all food entries to display
     ArrayList<FoodEntry> entries;
+    // Interface for detecting long-clicks in RecyclerView items
+    public interface OnItemLongClickListener {
+        void onItemLongClick(int position); // Sends the position of the clicked item
+    }
+
+    // Variable to store the listener set by MainActivity
+    private OnItemLongClickListener longClickListener;
+
+    // Method for MainActivity to set the long-click listener
+    public void setOnItemLongClickListener(OnItemLongClickListener listener) {
+        this.longClickListener = listener;
+    }
+
 
     // Constructor — pass in the list of entries from MainActivity
     public FoodEntryAdapter(ArrayList<FoodEntry> entries) {
@@ -46,6 +59,15 @@ public class FoodEntryAdapter extends RecyclerView.Adapter<FoodEntryAdapter.View
         holder.text1.setText(entry.name); // First line: food name
         holder.text2.setText(entry.calories + " kcal • P" +
                 entry.protein + "/C" + entry.carbs + "/F" + entry.fat + " g"); // Second line: macros
+        // Detect a long press on the item
+        holder.itemView.setOnLongClickListener(v -> {
+            if (longClickListener != null) {
+                // Pass the position of the long-pressed item to MainActivity
+                longClickListener.onItemLongClick(holder.getAdapterPosition());
+            }
+            return true; // True = event handled, no further processing
+        });
+
     }
 
     /**
