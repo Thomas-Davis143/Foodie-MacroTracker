@@ -30,6 +30,14 @@ public class FoodEntryAdapter extends RecyclerView.Adapter<FoodEntryAdapter.View
         this.longClickListener = listener;
     }
 
+    // Click listener interface for normal (short) taps
+    public interface OnItemClickListener { void onItemClick(int position); }
+    private OnItemClickListener clickListener;
+
+    // Allow MainActivity to set the click listener
+    public void setOnItemClickListener(OnItemClickListener l) { this.clickListener = l; }
+
+
 
     // Constructor — pass in the list of entries from MainActivity
     public FoodEntryAdapter(ArrayList<FoodEntry> entries) {
@@ -66,6 +74,12 @@ public class FoodEntryAdapter extends RecyclerView.Adapter<FoodEntryAdapter.View
                 longClickListener.onItemLongClick(holder.getAdapterPosition());
             }
             return true; // True = event handled, no further processing
+        });
+        //Click to edit entry
+        holder.itemView.setOnClickListener(v -> {
+            if (clickListener != null) {
+                clickListener.onItemClick(holder.getAdapterPosition()); // Notify activity
+            }
         });
 
     }

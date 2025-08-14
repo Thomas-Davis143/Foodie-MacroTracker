@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical" android:padding="16dp"
+    android:layout_width="match_parent" android:layout_height="wrap_content">
+
+    <!-- Name -->
+    <EditText
+        android:id="@+id/etEditName"
+        android:hint="Food name"
+        android:layout_width="match_parent" android:layout_height="wrap_content"/>
+
+    <!-- Row 1: Calories + Protein -->
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent" android:layout_height="wrap_content">
+
+        <EditText
+            android:id="@+id/etEditCalories"
+            android:hint="Calories" android:inputType="number"
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1"/>
+
+        <EditText
+            android:id="@+id/etEditProtein"
+            android:hint="Protein (g)" android:inputType="number"
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1"/>
+    </LinearLayout>
+
+    <!-- Row 2: Carbs + Fat -->
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent" android:layout_height="wrap_content">
+
+        <EditText
+            android:id="@+id/etEditCarbs"
+            android:hint="Carbs (g)" android:inputType="number"
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1"/>
+
+        <EditText
+            android:id="@+id/etEditFat"
+            android:hint="Fat (g)" android:inputType="number"
+            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1"/>
+    </LinearLayout>
+</LinearLayout>

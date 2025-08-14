@@ -61,10 +61,16 @@ public class MainActivity extends AppCompatActivity {
         // Setup RecyclerView for displaying entries
         adapter = new FoodEntryAdapter(entries);
         // Set a listener to handle long-clicks on list items
-// When triggered, call confirmDelete() with the item position
+        // When triggered, call confirmDelete() with the item position
         adapter.setOnItemLongClickListener(position -> confirmDelete(position));
         rvEntries.setLayoutManager(new LinearLayoutManager(this));
         rvEntries.setAdapter(adapter);
+        // Short tap = edit this entry
+        adapter.setOnItemClickListener(position -> showEditDialog(position));
+
+        // Long press = delete (from Step 7, keep this line too)
+        adapter.setOnItemLongClickListener(position -> confirmDelete(position));
+
 
         // Load saved data from previous sessions (only if it's the same day)
         loadData();
@@ -259,5 +265,68 @@ public class MainActivity extends AppCompatActivity {
                 .setNegativeButton("Cancel", null)
                 .show(); // Display the dialog
     }
+
+    /**
+     * Shows a small dialog to edit a FoodEntry.
+     * Pre-fills current values, updates totals correctly, saves, and refreshes the row.
+     */
+    private void showEditDialog(int position) {
+        // Inflate the dialog layout
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_edit_entry, null);
+
+        // Grab views
+        EditText etEditName    = dialogView.findViewById(R.id.etEditName);
+        EditText etEditCalories= dialogView.findViewById(R.id.etEditCalories);
+        EditText etEditProtein = dialogView.findViewById(R.id.etEditProtein);
+        EditText etEditCarbs   = dialogView.findViewById(R.id.etEditCarbs);
+        EditText etEditFat     = dialogView.findViewById(R.id.etEditFat);
+
+        // Current entry
+        FoodEntry e = entries.get(position);
+
+        // Pre-fill current values
+        etEditName.setText(e.name);
+        etEditCalories.setText(String.valueOf(e.calories));
+        etEditProtein.setText(String.valueOf(e.protein));
+        etEditCarbs.setText(String.valueOf(e.carbs));
+        etEditFat.setText(String.valueOf(e.fat));
+
+        // Build dialog
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Edit entry")
+                .setView(dialogView)
+                .setPositiveButton("Save", (dialog, which) -> {
+                    // Old values for totals adjustment
+                    int oldCal = e.calories, oldPro = e.protein, oldCar = e.carbs, oldFat = e.fat;
+
+                    // Read new values (safe parse)
+                    String newName = etEditName.getText().toString().trim();
+                    int newCal = parseInt(etEditCalories.getText().toString());
+                    int newPro = parseInt(etEditProtein.getText().toString());
+                    int newCar = parseInt(etEditCarbs.getText().toString());
+                    int newFat = parseInt(etEditFat.getText().toString());
+
+                    // Update the entry object
+                    e.name = newName.isEmpty() ? e.name : newName; // keep old if blank
+                    e.calories = newCal;
+                    e.protein  = newPro;
+                    e.carbs    = newCar;
+                    e.fat      = newFat;
+
+                    // Adjust totals: remove old, add new
+                    totalCalories += (newCal - oldCal);
+                    totalProtein  += (newPro - oldPro);
+                    totalCarbs    += (newCar - oldCar);
+                    totalFat      += (newFat - oldFat);
+
+                    // Refresh UI
+                    adapter.notifyItemChanged(position); // update just this row
+                    updateTotalsText();
+                    saveData(); // persist changes
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
 
 }
