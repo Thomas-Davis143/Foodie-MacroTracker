@@ -7,9 +7,11 @@ import android.os.Bundle;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ProgressBar;
+import android.widget.Spinner;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -24,10 +26,6 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Locale;
-import java.util.Collections;
-import android.widget.ArrayAdapter;
-import android.widget.Spinner;
-
 
 public class MainActivity extends AppCompatActivity {
 
@@ -36,10 +34,13 @@ public class MainActivity extends AppCompatActivity {
     Button btnAdd, btnClear, btnSetGoals;
     TextView tvTotals, tvDate;
 
-    // List
+    // Meal type spinner
+    Spinner spMealType;
+
+    // List + sectioned adapter
     RecyclerView rvEntries;
     ArrayList<FoodEntry> entries = new ArrayList<>();
-    FoodEntryAdapter adapter;
+    SectionedEntryAdapter adapter;
 
     // Totals
     int totalCalories = 0, totalProtein = 0, totalCarbs = 0, totalFat = 0;
@@ -50,8 +51,6 @@ public class MainActivity extends AppCompatActivity {
     // Progress UI
     ProgressBar pbCalories, pbProtein, pbCarbs, pbFat;
     TextView tvCalorieProgress, tvProteinProgress, tvCarbProgress, tvFatProgress;
-    Spinner spMealType;
-
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -66,10 +65,10 @@ public class MainActivity extends AppCompatActivity {
         etFat      = findViewById(R.id.etFat);
         btnAdd     = findViewById(R.id.btnAdd);
         btnClear   = findViewById(R.id.btnClear);
-        btnSetGoals = findViewById(R.id.btnSetGoals);
+        btnSetGoals= findViewById(R.id.btnSetGoals);
         tvTotals   = findViewById(R.id.tvTotals);
         tvDate     = findViewById(R.id.tvDate);
-        rvEntries  = findViewById(R.id.rvEntries);
+        spMealType = findViewById(R.id.spMealType);
 
         tvCalorieProgress = findViewById(R.id.tvCalorieProgress);
         tvProteinProgress = findViewById(R.id.tvProteinProgress);
@@ -81,21 +80,22 @@ public class MainActivity extends AppCompatActivity {
         pbCarbs    = findViewById(R.id.pbCarbs);
         pbFat      = findViewById(R.id.pbFat);
 
-        spMealType = findViewById(R.id.spMealType);
+        // Meal type spinner data
         ArrayAdapter<CharSequence> mealAdapter = ArrayAdapter.createFromResource(
                 this, R.array.meal_types, android.R.layout.simple_spinner_item);
         mealAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spMealType.setAdapter(mealAdapter);
 
-        // -- RecyclerView setup --
-        adapter = new FoodEntryAdapter(entries);
+        // -- RecyclerView with collapsible sections --
+        rvEntries  = findViewById(R.id.rvEntries);
+        adapter    = new SectionedEntryAdapter();
         rvEntries.setLayoutManager(new LinearLayoutManager(this));
         rvEntries.setAdapter(adapter);
 
         // Tap to edit
-        adapter.setOnItemClickListener(position -> showEditDialog(position));
+        adapter.setOnItemClickListener(this::showEditDialog);
         // Long-press to delete
-        adapter.setOnItemLongClickListener(position -> confirmDelete(position));
+        adapter.setOnItemLongClickListener(this::confirmDelete);
 
         // -- Goals + progress bars --
         loadGoals();
@@ -103,17 +103,13 @@ public class MainActivity extends AppCompatActivity {
         pbProtein.setMax(goalPro);
         pbCarbs.setMax(goalCar);
         pbFat.setMax(goalFat);
-
         btnSetGoals.setOnClickListener(v -> showSetGoalsDialog());
 
         // -- Buttons/IME --
         btnClear.setOnClickListener(v -> clearAllData());
         btnAdd.setOnClickListener(v -> addEntry());
         etFat.setOnEditorActionListener((v, actionId, event) -> {
-            if (actionId == EditorInfo.IME_ACTION_DONE) {
-                addEntry();
-                return true;
-            }
+            if (actionId == EditorInfo.IME_ACTION_DONE) { addEntry(); return true; }
             return false;
         });
 
@@ -123,6 +119,7 @@ public class MainActivity extends AppCompatActivity {
 
         updateTotalsText();
         updateProgressUI();
+        adapter.setData(entries); // build initial sections
     }
 
     // Add entry
@@ -135,19 +132,19 @@ public class MainActivity extends AppCompatActivity {
 
         if (!validateInputs(name, cal, pro, car, fat)) return;
 
-        String mealType = (String) spMealType.getSelectedItem();
         String today = getTodayString();
+        String mealType = (String) spMealType.getSelectedItem();
+
         FoodEntry entry = new FoodEntry(name, cal, pro, car, fat, today, mealType);
-        entries.add(0, entry);              // newest first
-        adapter.notifyItemInserted(0);
-        rvEntries.scrollToPosition(0);
-
-
+        entries.add(0, entry);                 // newest logical first
         totalCalories += cal;
         totalProtein  += pro;
         totalCarbs    += car;
         totalFat      += fat;
 
+        // UI + persist
+        adapter.setData(entries);              // rebuild sections
+        rvEntries.scrollToPosition(0);
         updateTotalsText();
         saveData();
         updateProgressUI();
@@ -163,18 +160,18 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // Delete (with confirm)
-    private void confirmDelete(int position) {
+    private void confirmDelete(FoodEntry e) {
         new androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("Delete entry?")
                 .setMessage("Remove this food from today?")
                 .setPositiveButton("Delete", (dialog, which) -> {
-                    FoodEntry e = entries.get(position);
                     totalCalories -= e.calories;
                     totalProtein  -= e.protein;
                     totalCarbs    -= e.carbs;
                     totalFat      -= e.fat;
-                    entries.remove(position);
-                    adapter.notifyItemRemoved(position);
+                    entries.remove(e);
+
+                    adapter.setData(entries);
                     updateTotalsText();
                     saveData();
                     updateProgressUI();
@@ -184,7 +181,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // Edit dialog
-    private void showEditDialog(int position) {
+    private void showEditDialog(FoodEntry e) {
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_edit_entry, null);
 
         EditText etEditName     = dialogView.findViewById(R.id.etEditName);
@@ -192,8 +189,6 @@ public class MainActivity extends AppCompatActivity {
         EditText etEditProtein  = dialogView.findViewById(R.id.etEditProtein);
         EditText etEditCarbs    = dialogView.findViewById(R.id.etEditCarbs);
         EditText etEditFat      = dialogView.findViewById(R.id.etEditFat);
-
-        FoodEntry e = entries.get(position);
 
         etEditName.setText(e.name);
         etEditCalories.setText(String.valueOf(e.calories));
@@ -230,7 +225,7 @@ public class MainActivity extends AppCompatActivity {
                     totalCarbs    += (newCar - oldCar);
                     totalFat      += (newFat - oldFat);
 
-                    adapter.notifyItemChanged(position);
+                    adapter.setData(entries); // rebuild sections (entry may move by time if you change timestamp elsewhere)
                     updateTotalsText();
                     saveData();
                     updateProgressUI();
@@ -252,6 +247,7 @@ public class MainActivity extends AppCompatActivity {
         editor.putInt("totalCarbs", totalCarbs);
         editor.putInt("totalFat", totalFat);
         editor.putString("lastSavedDate", getTodayString());
+        // goals saved via saveGoals()
         editor.apply();
     }
 
@@ -263,10 +259,12 @@ public class MainActivity extends AppCompatActivity {
         String today = getTodayString();
 
         if (!today.equals(lastSavedDate)) {
+            // New day — reset totals and entries
             entries.clear();
             totalCalories = totalProtein = totalCarbs = totalFat = 0;
             saveData();
         } else {
+            // Load entries + totals
             String json = prefs.getString("entries", null);
             Type type = new TypeToken<ArrayList<FoodEntry>>(){}.getType();
             ArrayList<FoodEntry> savedEntries = gson.fromJson(json, type);
@@ -274,16 +272,10 @@ public class MainActivity extends AppCompatActivity {
             if (savedEntries != null) {
                 entries.clear();
                 entries.addAll(savedEntries);
-                // Sort saved entries: newest first (entries with 0 timestamp treated as oldest)
-                Collections.sort(entries, (a, b) -> Long.compare(
-                        b.createdAt, a.createdAt
-                ));
-
                 totalCalories = prefs.getInt("totalCalories", 0);
                 totalProtein  = prefs.getInt("totalProtein", 0);
                 totalCarbs    = prefs.getInt("totalCarbs", 0);
                 totalFat      = prefs.getInt("totalFat", 0);
-                adapter.notifyDataSetChanged();
             }
         }
     }
@@ -372,8 +364,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void clearAllData() {
         entries.clear();
-        adapter.notifyDataSetChanged();
         totalCalories = totalProtein = totalCarbs = totalFat = 0;
+        adapter.setData(entries);
         updateTotalsText();
 
         SharedPreferences prefs = getSharedPreferences("FoodiePrefs", MODE_PRIVATE);
@@ -385,6 +377,14 @@ public class MainActivity extends AppCompatActivity {
     // Utils
     private int parseInt(String s) {
         try { return Integer.parseInt(s); } catch (NumberFormatException e) { return 0; }
+    }
+
+    private boolean validateInputs(String name, int cal, int pro, int car, int fat) {
+        if (name == null || name.trim().isEmpty()) { etFood.setError("Enter a food name"); toast("Please enter a food name."); return false; }
+        if (cal < 0 || pro < 0 || car < 0 || fat < 0) { toast("Values cannot be negative."); return false; }
+        if (cal == 0 && pro == 0 && car == 0 && fat == 0) { toast("Enter at least one non-zero value."); return false; }
+        if (cal > 5000 || pro > 1000 || car > 1000 || fat > 1000) { toast("One or more values look too large."); return false; }
+        return true;
     }
 
     private void toast(String msg) {
@@ -403,31 +403,4 @@ public class MainActivity extends AppCompatActivity {
             return new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
         }
     }
-
-    // Validates name and macro inputs before adding/editing an entry
-    private boolean validateInputs(String name, int cal, int pro, int car, int fat) {
-        // Require a non-empty name
-        if (name == null || name.trim().isEmpty()) {
-            etFood.setError("Enter a food name");
-            toast("Please enter a food name.");
-            return false;
-        }
-        // No negative numbers
-        if (cal < 0 || pro < 0 || car < 0 || fat < 0) {
-            toast("Values cannot be negative.");
-            return false;
-        }
-        // Avoid all zeros
-        if (cal == 0 && pro == 0 && car == 0 && fat == 0) {
-            toast("Enter at least one non-zero value.");
-            return false;
-        }
-        // Simple sanity caps
-        if (cal > 5000 || pro > 1000 || car > 1000 || fat > 1000) {
-            toast("One or more values look too large.");
-            return false;
-        }
-        return true;
-    }
-
 }
