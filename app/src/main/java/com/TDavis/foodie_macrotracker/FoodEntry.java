@@ -14,9 +14,9 @@ public class FoodEntry {
     int protein;  // Protein content (grams)
     int carbs;    // Carbohydrate content (grams)
     int fat;      // Fat content (grams)
-
-    // Date when the entry was logged (format: yyyy-MM-dd)
-    String date;
+    String date;  // Date when the entry was logged (format: yyyy-MM-dd)
+    long createdAt; // when this entry was created (ms since epoch)
+    String mealType;
 
     /**
      * Constructor — creates a new FoodEntry with all details.
@@ -28,12 +28,14 @@ public class FoodEntry {
      * @param fat      Fat in grams
      * @param date     Date the entry was recorded
      */
-    public FoodEntry(String name, int calories, int protein, int carbs, int fat, String date) {
+    public FoodEntry(String name, int calories, int protein, int carbs, int fat, String date, String mealType) {
         this.name = name;
         this.calories = calories;
         this.protein = protein;
         this.carbs = carbs;
         this.fat = fat;
         this.date = date;
+        this.createdAt = System.currentTimeMillis(); // set timestamp on create
+        this.mealType = mealType;
     }
 }

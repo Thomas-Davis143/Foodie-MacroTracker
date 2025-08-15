@@ -7,6 +7,9 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 import java.util.ArrayList;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 /**
  * FoodEntryAdapter is the bridge between the ArrayList<FoodEntry>
@@ -65,8 +68,14 @@ public class FoodEntryAdapter extends RecyclerView.Adapter<FoodEntryAdapter.View
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         FoodEntry entry = entries.get(position);
         holder.text1.setText(entry.name); // First line: food name
-        holder.text2.setText(entry.calories + " kcal • P" +
-                entry.protein + "/C" + entry.carbs + "/F" + entry.fat + " g"); // Second line: macros
+        String time = (entry.createdAt > 0)
+                ? new SimpleDateFormat("h:mm a", Locale.getDefault()).format(new Date(entry.createdAt))
+                : "";
+        String mt = (entry.mealType == null ? "" : " • " + entry.mealType);
+        holder.text2.setText(entry.calories + " kcal • P" + entry.protein + "/C" + entry.carbs + "/F" + entry.fat + " g"
+                + (time.isEmpty() ? "" : " • " + time) + mt);
+
+
         // Detect a long press on the item
         holder.itemView.setOnLongClickListener(v -> {
             if (longClickListener != null) {

@@ -2,27 +2,46 @@
     android:orientation="vertical" android:padding="16dp"
     android:layout_width="match_parent" android:layout_height="match_parent">
 
+    <!-- Food name -->
     <EditText
         android:id="@+id/etFood"
         android:hint="Food name"
-        android:layout_width="match_parent" android:layout_height="wrap_content"/>
+        android:inputType="textCapWords"
+        android:maxLines="1"
+        android:imeOptions="actionNext"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"/>
+
+    <Spinner
+        android:id="@+id/spMealType"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:prompt="@string/app_name"/>
 
     <LinearLayout
         android:orientation="horizontal"
         android:layout_width="match_parent" android:layout_height="wrap_content">
 
+        <!-- Calories -->
         <EditText
             android:id="@+id/etCalories"
             android:hint="Calories"
             android:inputType="number"
-            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:imeOptions="actionNext"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
             android:layout_weight="1"/>
 
+        <!-- Protein -->
         <EditText
             android:id="@+id/etProtein"
             android:hint="Protein (g)"
             android:inputType="number"
-            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:imeOptions="actionNext"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
             android:layout_weight="1"/>
     </LinearLayout>
 
@@ -30,18 +49,26 @@
         android:orientation="horizontal"
         android:layout_width="match_parent" android:layout_height="wrap_content">
 
+        <!-- Carbs -->
         <EditText
             android:id="@+id/etCarbs"
             android:hint="Carbs (g)"
             android:inputType="number"
-            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:imeOptions="actionNext"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
             android:layout_weight="1"/>
 
+        <!-- Fat (Done triggers Add) -->
         <EditText
             android:id="@+id/etFat"
             android:hint="Fat (g)"
             android:inputType="number"
-            android:layout_width="0dp" android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:imeOptions="actionDone"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
             android:layout_weight="1"/>
     </LinearLayout>
 
@@ -64,6 +91,82 @@
         android:text="Totals: 0 kcal • P0/C0/F0 g"
         android:layout_marginTop="8dp"
         android:layout_width="match_parent" android:layout_height="wrap_content"/>
+
+    <!-- ===== Daily goals progress section ===== -->
+    <TextView
+        android:id="@+id/tvGoalsHeader"
+        android:text="Today's Progress"
+        android:textStyle="bold"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"/>
+
+    <Button
+        android:id="@+id/btnSetGoals"
+        android:text="Set Goals"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="6dp"/>
+
+    <!-- Calories -->
+    <TextView
+        android:id="@+id/tvCalorieProgress"
+        android:text="Calories: 0 / 2000 (0%)"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"/>
+    <ProgressBar
+        android:id="@+id/pbCalories"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="8dp"
+        android:max="2000"
+        android:progress="0"/>
+
+    <!-- Protein -->
+    <TextView
+        android:id="@+id/tvProteinProgress"
+        android:text="Protein: 0 / 150 g (0%)"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"/>
+    <ProgressBar
+        android:id="@+id/pbProtein"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="8dp"
+        android:max="150"
+        android:progress="0"/>
+
+    <!-- Carbs -->
+    <TextView
+        android:id="@+id/tvCarbProgress"
+        android:text="Carbs: 0 / 250 g (0%)"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"/>
+    <ProgressBar
+        android:id="@+id/pbCarbs"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="8dp"
+        android:max="250"
+        android:progress="0"/>
+
+    <!-- Fat -->
+    <TextView
+        android:id="@+id/tvFatProgress"
+        android:text="Fat: 0 / 70 g (0%)"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"/>
+    <ProgressBar
+        android:id="@+id/pbFat"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="8dp"
+        android:max="70"
+        android:progress="0"/>
+    <!-- ===== end progress section ===== -->
 
     <Button
         android:id="@+id/btnClear"
