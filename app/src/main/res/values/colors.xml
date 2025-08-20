@@ -1,5 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="black">#FF000000</color>
-    <color name="white">#FFFFFFFF</color>
+    <!-- Base / LIGHT palette -->
+    <color name="primary">#7C4DFF</color>
+    <color name="onPrimary">#FFFFFFFF</color>
+    <color name="secondary">#00E5A8</color>
+    <color name="tertiary">#FFB300</color>
+
+    <!-- Make light mode actually light -->
+    <color name="surface">#FFFFFFFF</color>   <!-- was dark; now white -->
+    <color name="onSurface">#121212</color>   <!-- dark text for light bg -->
+
+    <!-- Night-name fallbacks so refs always resolve -->
+    <color name="primary_dark">@color/primary</color>
+    <color name="onPrimary_dark">@color/onPrimary</color>
+    <color name="secondary_dark">@color/secondary</color>
+    <color name="tertiary_dark">@color/tertiary</color>
+    <color name="surface_dark">@color/surface</color>
+    <color name="onSurface_dark">@color/onSurface</color>
+    <color name="onSurface_dark_2">#B3FFFFFF</color>
+
+    <!-- Hex fallbacks used by some themes/styles -->
+    <color name="black_alpha_60">#99000000</color>
+    <color name="error_red_500">#FFFF5252</color>
 </resources>

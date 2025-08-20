@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary_dark">#8E66FF</color>
+    <color name="onPrimary_dark">#0B0614</color>
+    <color name="secondary_dark">#00F5BE</color>
+    <color name="tertiary_dark">#FFC04D</color>
+    <color name="surface_dark">#0D0D0F</color>
+    <color name="onSurface_dark">#FFFFFFFF</color>
+    <color name="onSurface_dark_2">#B3FFFFFF</color>
+</resources>

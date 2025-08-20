@@ -1,6 +1,7 @@
 package com.TDavis.foodie_macrotracker;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
@@ -15,6 +16,7 @@ import android.widget.Spinner;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -31,7 +33,7 @@ public class MainActivity extends AppCompatActivity {
 
     // Inputs + UI
     EditText etFood, etCalories, etProtein, etCarbs, etFat;
-    Button btnAdd, btnClear, btnSetGoals;
+    Button btnAdd, btnClear, btnSettings;
     TextView tvTotals, tvDate;
 
     // Meal type spinner
@@ -51,9 +53,15 @@ public class MainActivity extends AppCompatActivity {
     // Progress UI
     ProgressBar pbCalories, pbProtein, pbCarbs, pbFat;
     TextView tvCalorieProgress, tvProteinProgress, tvCarbProgress, tvFatProgress;
+    Button btnPrevDay, btnNextDay;
+    String currentDate; // yyyy-MM-dd we’re viewing
+    ArrayList<FoodEntry> displayEntries = new ArrayList<>(); // what the adapter shows (today or history)
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Apply saved theme BEFORE setContentView
+        applySavedTheme();
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
@@ -65,7 +73,7 @@ public class MainActivity extends AppCompatActivity {
         etFat      = findViewById(R.id.etFat);
         btnAdd     = findViewById(R.id.btnAdd);
         btnClear   = findViewById(R.id.btnClear);
-        btnSetGoals= findViewById(R.id.btnSetGoals);
+        btnSettings= findViewById(R.id.btnSettings);
         tvTotals   = findViewById(R.id.tvTotals);
         tvDate     = findViewById(R.id.tvDate);
         spMealType = findViewById(R.id.spMealType);
@@ -79,6 +87,10 @@ public class MainActivity extends AppCompatActivity {
         pbProtein  = findViewById(R.id.pbProtein);
         pbCarbs    = findViewById(R.id.pbCarbs);
         pbFat      = findViewById(R.id.pbFat);
+
+        btnPrevDay = findViewById(R.id.btnPrevDay);
+        btnNextDay = findViewById(R.id.btnNextDay);
+
 
         // Meal type spinner data
         ArrayAdapter<CharSequence> mealAdapter = ArrayAdapter.createFromResource(
@@ -97,29 +109,61 @@ public class MainActivity extends AppCompatActivity {
         // Long-press to delete
         adapter.setOnItemLongClickListener(this::confirmDelete);
 
-        // -- Goals + progress bars --
-        loadGoals();
-        pbCalories.setMax(goalCal);
-        pbProtein.setMax(goalPro);
-        pbCarbs.setMax(goalCar);
-        pbFat.setMax(goalFat);
-        btnSetGoals.setOnClickListener(v -> showSetGoalsDialog());
-
         // -- Buttons/IME --
         btnClear.setOnClickListener(v -> clearAllData());
         btnAdd.setOnClickListener(v -> addEntry());
+        btnSettings.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
         etFat.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_DONE) { addEntry(); return true; }
             return false;
         });
 
+        // -- Load goals, set progress maxes --
+        loadGoals();
+        pbCalories.setMax(goalCal);
+        pbProtein.setMax(goalPro);
+        pbCarbs.setMax(goalCar);
+        pbFat.setMax(goalFat);
+
         // -- Load data + set date header --
         loadData();
-        tvDate.setText("Entries for " + getTodayString());
+        currentDate = getTodayString();
+        refreshForDate(currentDate);
 
-        updateTotalsText();
+        btnPrevDay.setOnClickListener(v -> {
+            currentDate = shiftDateString(currentDate, -1);
+            refreshForDate(currentDate);
+        });
+
+        btnNextDay.setOnClickListener(v -> {
+            currentDate = shiftDateString(currentDate, +1);
+            refreshForDate(currentDate);
+        });
+
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // When returning from Settings, re-apply theme + goals
+        applySavedTheme();
+        loadGoals();
+        pbCalories.setMax(goalCal);
+        pbProtein.setMax(goalPro);
+        pbCarbs.setMax(goalCar);
+        pbFat.setMax(goalFat);
         updateProgressUI();
-        adapter.setData(entries); // build initial sections
+        adapter.setData(entries);
+    }
+
+    // THEME
+    private void applySavedTheme() {
+        SharedPreferences prefs = getSharedPreferences("FoodiePrefs", MODE_PRIVATE);
+        int mode = prefs.getInt("themeMode", 0); // 0=System, 1=Light, 2=Dark
+        int m = AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM;
+        if (mode == 1) m = AppCompatDelegate.MODE_NIGHT_NO;
+        else if (mode == 2) m = AppCompatDelegate.MODE_NIGHT_YES;
+        AppCompatDelegate.setDefaultNightMode(m);
     }
 
     // Add entry
@@ -142,7 +186,6 @@ public class MainActivity extends AppCompatActivity {
         totalCarbs    += car;
         totalFat      += fat;
 
-        // UI + persist
         adapter.setData(entries);              // rebuild sections
         rvEntries.scrollToPosition(0);
         updateTotalsText();
@@ -161,6 +204,11 @@ public class MainActivity extends AppCompatActivity {
 
     // Delete (with confirm)
     private void confirmDelete(FoodEntry e) {
+        if (!currentDate.equals(getTodayString())) {
+            toast("Switch to Today to edit entries.");
+            return;
+        }
+
         new androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("Delete entry?")
                 .setMessage("Remove this food from today?")
@@ -182,6 +230,11 @@ public class MainActivity extends AppCompatActivity {
 
     // Edit dialog
     private void showEditDialog(FoodEntry e) {
+        if (!currentDate.equals(getTodayString())) {
+            toast("Switch to Today to edit entries.");
+            return;
+        }
+
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_edit_entry, null);
 
         EditText etEditName     = dialogView.findViewById(R.id.etEditName);
@@ -225,7 +278,7 @@ public class MainActivity extends AppCompatActivity {
                     totalCarbs    += (newCar - oldCar);
                     totalFat      += (newFat - oldFat);
 
-                    adapter.setData(entries); // rebuild sections (entry may move by time if you change timestamp elsewhere)
+                    adapter.setData(entries);
                     updateTotalsText();
                     saveData();
                     updateProgressUI();
@@ -240,16 +293,26 @@ public class MainActivity extends AppCompatActivity {
         SharedPreferences.Editor editor = prefs.edit();
         Gson gson = new Gson();
 
+        // store today's entries/totals (existing behavior)
         String json = gson.toJson(entries);
         editor.putString("entries", json);
         editor.putInt("totalCalories", totalCalories);
         editor.putInt("totalProtein", totalProtein);
         editor.putInt("totalCarbs", totalCarbs);
         editor.putInt("totalFat", totalFat);
-        editor.putString("lastSavedDate", getTodayString());
-        // goals saved via saveGoals()
+        String today = getTodayString();
+        editor.putString("lastSavedDate", today);
         editor.apply();
+
+        // NEW: mirror into "history" map keyed by date
+        java.lang.reflect.Type mapType = new com.google.gson.reflect.TypeToken<java.util.HashMap<String, java.util.ArrayList<FoodEntry>>>(){}.getType();
+        String hJson = prefs.getString("history", null);
+        java.util.HashMap<String, java.util.ArrayList<FoodEntry>> history =
+                (hJson == null ? new java.util.HashMap<>() : gson.fromJson(hJson, mapType));
+        history.put(today, new java.util.ArrayList<>(entries));
+        prefs.edit().putString("history", gson.toJson(history)).apply();
     }
+
 
     private void loadData() {
         SharedPreferences prefs = getSharedPreferences("FoodiePrefs", MODE_PRIVATE);
@@ -259,12 +322,10 @@ public class MainActivity extends AppCompatActivity {
         String today = getTodayString();
 
         if (!today.equals(lastSavedDate)) {
-            // New day — reset totals and entries
             entries.clear();
             totalCalories = totalProtein = totalCarbs = totalFat = 0;
             saveData();
         } else {
-            // Load entries + totals
             String json = prefs.getString("entries", null);
             Type type = new TypeToken<ArrayList<FoodEntry>>(){}.getType();
             ArrayList<FoodEntry> savedEntries = gson.fromJson(json, type);
@@ -280,17 +341,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Goals (save/load + dialog)
-    private void saveGoals() {
-        SharedPreferences prefs = getSharedPreferences("FoodiePrefs", MODE_PRIVATE);
-        prefs.edit()
-                .putInt("goalCal", goalCal)
-                .putInt("goalPro", goalPro)
-                .putInt("goalCar", goalCar)
-                .putInt("goalFat", goalFat)
-                .apply();
-    }
-
+    // Goals (used by progress)
     private void loadGoals() {
         SharedPreferences prefs = getSharedPreferences("FoodiePrefs", MODE_PRIVATE);
         goalCal = prefs.getInt("goalCal", goalCal);
@@ -299,57 +350,16 @@ public class MainActivity extends AppCompatActivity {
         goalFat = prefs.getInt("goalFat", goalFat);
     }
 
-    private void showSetGoalsDialog() {
-        View dlg = getLayoutInflater().inflate(R.layout.dialog_set_goals, null);
-
-        EditText etGoalCal = dlg.findViewById(R.id.etGoalCal);
-        EditText etGoalPro = dlg.findViewById(R.id.etGoalPro);
-        EditText etGoalCar = dlg.findViewById(R.id.etGoalCar);
-        EditText etGoalFat = dlg.findViewById(R.id.etGoalFat);
-
-        etGoalCal.setText(String.valueOf(goalCal));
-        etGoalPro.setText(String.valueOf(goalPro));
-        etGoalCar.setText(String.valueOf(goalCar));
-        etGoalFat.setText(String.valueOf(goalFat));
-
-        new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Set Daily Goals")
-                .setView(dlg)
-                .setPositiveButton("Save", (d, w) -> {
-                    int newCal = Math.max(1, parseInt(etGoalCal.getText().toString()));
-                    int newPro = Math.max(1, parseInt(etGoalPro.getText().toString()));
-                    int newCar = Math.max(1, parseInt(etGoalCar.getText().toString()));
-                    int newFat = Math.max(1, parseInt(etGoalFat.getText().toString()));
-
-                    goalCal = newCal; goalPro = newPro; goalCar = newCar; goalFat = newFat;
-
-                    pbCalories.setMax(goalCal);
-                    pbProtein.setMax(goalPro);
-                    pbCarbs.setMax(goalCar);
-                    pbFat.setMax(goalFat);
-
-                    saveGoals();
-                    updateProgressUI();
-                })
-                .setNegativeButton("Cancel", null)
-                .show();
-    }
-
     // UI helpers
     private void updateTotalsText() {
         tvTotals.setText("Totals: " + totalCalories + " kcal • P" + totalProtein + "/C" + totalCarbs + "/F" + totalFat + " g");
     }
 
     private void updateProgressUI() {
-        int cal = Math.min(totalCalories, goalCal);
-        int pro = Math.min(totalProtein,  goalPro);
-        int car = Math.min(totalCarbs,    goalCar);
-        int fat = Math.min(totalFat,      goalFat);
-
-        pbCalories.setProgress(cal);
-        pbProtein.setProgress(pro);
-        pbCarbs.setProgress(car);
-        pbFat.setProgress(fat);
+        pbCalories.setProgress(Math.min(totalCalories, goalCal));
+        pbProtein.setProgress(Math.min(totalProtein,  goalPro));
+        pbCarbs.setProgress(Math.min(totalCarbs,    goalCar));
+        pbFat.setProgress(Math.min(totalFat,      goalFat));
 
         int pCal = (int)Math.round(100.0 * totalCalories / Math.max(goalCal, 1));
         int pPro = (int)Math.round(100.0 * totalProtein  / Math.max(goalPro, 1));
@@ -369,16 +379,19 @@ public class MainActivity extends AppCompatActivity {
         updateTotalsText();
 
         SharedPreferences prefs = getSharedPreferences("FoodiePrefs", MODE_PRIVATE);
-        prefs.edit().clear().apply();
+        prefs.edit().remove("entries")
+                .putInt("totalCalories", 0)
+                .putInt("totalProtein", 0)
+                .putInt("totalCarbs", 0)
+                .putInt("totalFat", 0)
+                .putString("lastSavedDate", getTodayString())
+                .apply();
 
         updateProgressUI();
     }
 
     // Utils
-    private int parseInt(String s) {
-        try { return Integer.parseInt(s); } catch (NumberFormatException e) { return 0; }
-    }
-
+    private int parseInt(String s) { try { return Integer.parseInt(s); } catch (NumberFormatException e) { return 0; } }
     private boolean validateInputs(String name, int cal, int pro, int car, int fat) {
         if (name == null || name.trim().isEmpty()) { etFood.setError("Enter a food name"); toast("Please enter a food name."); return false; }
         if (cal < 0 || pro < 0 || car < 0 || fat < 0) { toast("Values cannot be negative."); return false; }
@@ -386,21 +399,96 @@ public class MainActivity extends AppCompatActivity {
         if (cal > 5000 || pro > 1000 || car > 1000 || fat > 1000) { toast("One or more values look too large."); return false; }
         return true;
     }
-
-    private void toast(String msg) {
-        android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show();
-    }
-
+    private void toast(String msg) { android.widget.Toast.makeText(this, msg, android.widget.Toast.LENGTH_SHORT).show(); }
     private void hideKeyboard(View view) {
         InputMethodManager imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
         if (imm != null && view != null) imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
     }
-
     private String getTodayString() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            return java.time.LocalDate.now().toString();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) return java.time.LocalDate.now().toString();
+        return new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
+    }
+
+    // Refresh UI for a given date (today = live/editable, past/future = view-only)
+    private void refreshForDate(String date) {
+        tvDate.setText("Entries for " + date);
+
+        boolean isToday = date.equals(getTodayString());
+
+        // Load display list
+        if (isToday) {
+            displayEntries = entries; // live list
         } else {
-            return new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
+            displayEntries = loadEntriesFor(date); // history snapshot or empty
+        }
+
+        // Rebuild sections
+        adapter.setData(displayEntries);
+
+        // Compute local totals for this day
+        int cal=0, pro=0, car=0, fat=0;
+        for (FoodEntry e : displayEntries) {
+            cal += e.calories; pro += e.protein; car += e.carbs; fat += e.fat;
+        }
+        // Show totals for that day
+        tvTotals.setText("Totals: " + cal + " kcal • P" + pro + "/C" + car + "/F" + fat + " g");
+
+        // Update progress bars against current goals
+        pbCalories.setProgress(Math.min(cal, goalCal));
+        pbProtein.setProgress(Math.min(pro, goalPro));
+        pbCarbs.setProgress(Math.min(car, goalCar));
+        pbFat.setProgress(Math.min(fat, goalFat));
+
+        int pCal = (int)Math.round(100.0 * cal / Math.max(goalCal, 1));
+        int pPro = (int)Math.round(100.0 * pro / Math.max(goalPro, 1));
+        int pCar = (int)Math.round(100.0 * car / Math.max(goalCar, 1));
+        int pFat = (int)Math.round(100.0 * fat / Math.max(goalFat, 1));
+
+        tvCalorieProgress.setText("Calories: " + cal + " / " + goalCal + " (" + pCal + "%)");
+        tvProteinProgress.setText("Protein: "  + pro + " / " + goalPro + " g (" + pPro + "%)");
+        tvCarbProgress.setText("Carbs: "      + car + " / " + goalCar + " g (" + pCar + "%)");
+        tvFatProgress.setText("Fat: "         + fat + " / " + goalFat + " g (" + pFat + "%)");
+
+        // Enable edits only for today
+        btnAdd.setEnabled(isToday);
+        btnClear.setEnabled(isToday);
+        float alpha = isToday ? 1f : 0.5f;
+        btnAdd.setAlpha(alpha);
+        btnClear.setAlpha(alpha);
+
+        // Next arrow disabled when at today (no future)
+        btnNextDay.setEnabled(!isToday);
+    }
+
+    // Load entries for a specific date from history map
+    private java.util.ArrayList<FoodEntry> loadEntriesFor(String date) {
+        SharedPreferences prefs = getSharedPreferences("FoodiePrefs", MODE_PRIVATE);
+        String hJson = prefs.getString("history", null);
+        if (hJson == null) return new java.util.ArrayList<>();
+        Gson gson = new Gson();
+        java.lang.reflect.Type mapType = new com.google.gson.reflect.TypeToken<java.util.HashMap<String, java.util.ArrayList<FoodEntry>>>(){}.getType();
+        java.util.HashMap<String, java.util.ArrayList<FoodEntry>> history = gson.fromJson(hJson, mapType);
+        java.util.ArrayList<FoodEntry> list = history.get(date);
+        return (list == null) ? new java.util.ArrayList<>() : list;
+    }
+
+    // Shift a yyyy-MM-dd string by +/- days
+    private String shiftDateString(String yyyyMmDd, int days) {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                java.time.LocalDate d = java.time.LocalDate.parse(yyyyMmDd);
+                return d.plusDays(days).toString();
+            } else {
+                java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault());
+                java.util.Date d = sdf.parse(yyyyMmDd);
+                java.util.Calendar c = java.util.Calendar.getInstance();
+                c.setTime(d);
+                c.add(java.util.Calendar.DAY_OF_YEAR, days);
+                return sdf.format(c.getTime());
+            }
+        } catch (Exception e) {
+            return getTodayString(); // fallback
         }
     }
+
 }

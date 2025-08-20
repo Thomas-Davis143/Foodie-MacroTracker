@@ -11,28 +11,24 @@ import androidx.recyclerview.widget.RecyclerView;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
-/**
- * RecyclerView adapter that groups FoodEntry items by meal type
- * (Breakfast/Lunch/Dinner/Snack/Other) with collapsible headers.
- */
+/** Collapsible sections (Breakfast/Lunch/Dinner/Snack/Other) with per-section totals. */
 public class SectionedEntryAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
     private static final int TYPE_HEADER = 0;
     private static final int TYPE_ITEM   = 1;
 
-    // Order of sections and default expanded state
-    private final List<String> sectionOrder = Arrays.asList("Breakfast", "Lunch", "Dinner", "Snack", "Other");
+    private final List<String> sectionOrder = Arrays.asList("Breakfast","Lunch","Dinner","Snack","Other");
     private final LinkedHashMap<String, Boolean> expanded = new LinkedHashMap<>();
-    {
-        for (String s : sectionOrder) expanded.put(s, true); // all open by default
-    }
+    { for (String s : sectionOrder) expanded.put(s, true); }
 
-    // Source data and flattened rows for the adapter
     private final List<FoodEntry> source = new ArrayList<>();
     private final List<Row> rows = new ArrayList<>();
-    private final Map<String, Integer> counts = new HashMap<>();
+    private final Map<String,Integer> counts = new HashMap<>();
 
-    // Click listeners for items (not headers)
+    // Per-section totals
+    private final Map<String, SectionTotals> totals = new HashMap<>();
+    private static class SectionTotals { int cal, pro, car, fat; void add(FoodEntry e){ cal+=e.calories; pro+=e.protein; car+=e.carbs; fat+=e.fat; } }
+
     public interface OnItemClickListener { void onItemClick(FoodEntry e); }
     public interface OnItemLongClickListener { void onItemLongClick(FoodEntry e); }
     private OnItemClickListener clickListener;
@@ -40,46 +36,32 @@ public class SectionedEntryAdapter extends RecyclerView.Adapter<RecyclerView.Vie
     public void setOnItemClickListener(OnItemClickListener l) { this.clickListener = l; }
     public void setOnItemLongClickListener(OnItemLongClickListener l) { this.longClickListener = l; }
 
-
-    /** Replace data and rebuild rows */
     public void setData(List<FoodEntry> entries) {
         source.clear();
         if (entries != null) source.addAll(entries);
         rebuild();
     }
 
-    /** Groups by mealType, sorts newest-first, then flattens with headers */
     private void rebuild() {
-        rows.clear();
-        counts.clear();
-        totals.clear();
+        rows.clear(); counts.clear(); totals.clear();
 
-        // Group entries by meal type
         Map<String, List<FoodEntry>> byType = new LinkedHashMap<>();
         for (String s : sectionOrder) byType.put(s, new ArrayList<>());
-
         for (FoodEntry e : source) {
             String key = (e.mealType == null || e.mealType.trim().isEmpty()) ? "Other" : e.mealType;
-            if (!byType.containsKey(key)) byType.put(key, new ArrayList<>()); // safety for unknown types
+            if (!byType.containsKey(key)) byType.put(key, new ArrayList<>());
             byType.get(key).add(e);
         }
-
-        // Sort each section (newest first)
         for (List<FoodEntry> list : byType.values()) {
-            Collections.sort(list, (a, b) -> Long.compare(b.createdAt, a.createdAt));
+            Collections.sort(list, (a,b) -> Long.compare(b.createdAt, a.createdAt));
         }
-
-        // Build rows with counts + totals
         for (String sec : sectionOrder) {
             List<FoodEntry> list = byType.get(sec);
-
             int count = (list == null) ? 0 : list.size();
             counts.put(sec, count);
 
             SectionTotals st = new SectionTotals();
-            if (list != null) {
-                for (FoodEntry e : list) st.add(e);
-            }
+            if (list != null) for (FoodEntry e : list) st.add(e);
             totals.put(sec, st);
 
             rows.add(Row.header(sec));
@@ -87,40 +69,34 @@ public class SectionedEntryAdapter extends RecyclerView.Adapter<RecyclerView.Vie
                 for (FoodEntry e : list) rows.add(Row.item(sec, e));
             }
         }
-
         notifyDataSetChanged();
     }
 
-    // ----- Row model -----
     private static class Row {
         final int type; final String header; final FoodEntry entry;
-        private Row(int type, String header, FoodEntry entry) { this.type = type; this.header = header; this.entry = entry; }
-        static Row header(String h) { return new Row(TYPE_HEADER, h, null); }
-        static Row item(String h, FoodEntry e) { return new Row(TYPE_ITEM, h, e); }
+        private Row(int type, String header, FoodEntry entry){ this.type=type; this.header=header; this.entry=entry; }
+        static Row header(String h){ return new Row(TYPE_HEADER, h, null); }
+        static Row item(String h, FoodEntry e){ return new Row(TYPE_ITEM, h, e); }
     }
 
-    // ----- ViewHolders -----
     static class HeaderVH extends RecyclerView.ViewHolder {
         TextView t;
-        HeaderVH(View v) { super(v); t = v.findViewById(android.R.id.text1); }
+        HeaderVH(View v){ super(v); t = v.findViewById(android.R.id.text1); }
     }
     static class ItemVH extends RecyclerView.ViewHolder {
         TextView t1, t2;
-        ItemVH(View v) { super(v); t1 = v.findViewById(android.R.id.text1); t2 = v.findViewById(android.R.id.text2); }
+        ItemVH(View v){ super(v); t1 = v.findViewById(android.R.id.text1); t2 = v.findViewById(android.R.id.text2); }
     }
 
     @Override public int getItemViewType(int position) { return rows.get(position).type; }
 
-    @NonNull
-    @Override
+    @NonNull @Override
     public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         if (viewType == TYPE_HEADER) {
-            View v = LayoutInflater.from(parent.getContext())
-                    .inflate(android.R.layout.simple_list_item_1, parent, false);
+            View v = LayoutInflater.from(parent.getContext()).inflate(android.R.layout.simple_list_item_1, parent, false);
             return new HeaderVH(v);
         } else {
-            View v = LayoutInflater.from(parent.getContext())
-                    .inflate(android.R.layout.simple_list_item_2, parent, false);
+            View v = LayoutInflater.from(parent.getContext()).inflate(android.R.layout.simple_list_item_2, parent, false);
             return new ItemVH(v);
         }
     }
@@ -128,63 +104,32 @@ public class SectionedEntryAdapter extends RecyclerView.Adapter<RecyclerView.Vie
     @Override
     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
         Row row = rows.get(position);
-
         if (row.type == TYPE_HEADER) {
             HeaderVH h = (HeaderVH) holder;
             int cnt = counts.getOrDefault(row.header, 0);
             boolean isOpen = expanded.getOrDefault(row.header, true);
-            String arrow = isOpen ? " ▾" : " ▸";
             SectionTotals st = totals.get(row.header);
-            int kcal = (st == null ? 0 : st.cal);
-            int p = (st == null ? 0 : st.pro);
-            int c = (st == null ? 0 : st.car);
-            int f = (st == null ? 0 : st.fat);
-
-// Example: "Breakfast (3) — 520 kcal • P40/C70/F20 ▾"
+            int kcal = st == null ? 0 : st.cal;
+            int p = st == null ? 0 : st.pro;
+            int c = st == null ? 0 : st.car;
+            int f = st == null ? 0 : st.fat;
+            String arrow = isOpen ? " ▾" : " ▸";
             h.t.setText(row.header + " (" + cnt + ") — " + kcal + " kcal • P" + p + "/C" + c + "/F" + f + arrow);
-
-            h.itemView.setOnClickListener(v -> {
-                expanded.put(row.header, !isOpen);
-                rebuild(); // re-flatten rows
-            });
-            h.itemView.setOnLongClickListener(null); // no long-press on headers
-
+            h.itemView.setOnClickListener(v -> { expanded.put(row.header, !isOpen); rebuild(); });
+            h.itemView.setOnLongClickListener(null);
         } else {
             ItemVH i = (ItemVH) holder;
             FoodEntry e = row.entry;
-
             i.t1.setText(e.name);
-
             String time = (e.createdAt > 0)
-                    ? new SimpleDateFormat("h:mm a", Locale.getDefault()).format(new Date(e.createdAt))
-                    : "";
+                    ? new SimpleDateFormat("h:mm a", Locale.getDefault()).format(new Date(e.createdAt)) : "";
             String mt = (e.mealType == null ? "" : " • " + e.mealType);
-
             i.t2.setText(e.calories + " kcal • P" + e.protein + "/C" + e.carbs + "/F" + e.fat + " g"
                     + (time.isEmpty() ? "" : " • " + time) + mt);
-
-            // Forward item events
             i.itemView.setOnClickListener(v -> { if (clickListener != null) clickListener.onItemClick(e); });
-            i.itemView.setOnLongClickListener(v -> {
-                if (longClickListener != null) { longClickListener.onItemLongClick(e); return true; }
-                return false;
-            });
+            i.itemView.setOnLongClickListener(v -> { if (longClickListener != null) { longClickListener.onItemLongClick(e); return true; } return false; });
         }
     }
 
     @Override public int getItemCount() { return rows.size(); }
-
-    // Per-section totals (kcal + macros)
-    private final Map<String, SectionTotals> totals = new HashMap<>();
-
-    private static class SectionTotals {
-        int cal, pro, car, fat;
-        void add(FoodEntry e) {
-            cal += e.calories;
-            pro += e.protein;
-            car += e.carbs;
-            fat += e.fat;
-        }
-    }
-
 }
