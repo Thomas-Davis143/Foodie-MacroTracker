@@ -120,5 +120,51 @@ app.get("/api/foods/:fdcId", async (req, res) => {
   }
 });
 
+// GET /api/barcode/:code  → Open Food Facts
+app.get("/api/barcode/:code", async (req, res) => {
+  try {
+    const code = (req.params.code || "").trim();
+    if (!code) return res.status(400).json({ error: "Missing barcode" });
+
+    const { data } = await axios.get(
+      `https://world.openfoodfacts.org/api/v2/product/${code}`,
+      {
+        headers: { "User-Agent": "FoodieMacroTracker/1.0 (+https://example.com)" },
+        timeout: 10000
+      }
+    );
+
+    if (data.status !== 1 || !data.product) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    const p = data.product;
+    const n = p.nutriments || {};
+    const pick = (serv, per100) => (n[serv] ?? n[per100] ?? null);
+
+    // kcal first, then macros (prefer per serving; fallback to per 100g)
+    const result = {
+      code,
+      description: p.product_name || null,
+      brand: p.brands || null,
+      servingSize: p.serving_size || null,
+      servingSizeUnit: null, // OFF serving_size is a string (e.g., "30 g")
+      calories: pick("energy-kcal_serving", "energy-kcal_100g"),
+      protein:  pick("proteins_serving", "proteins_100g"),
+      carbs:    pick("carbohydrates_serving", "carbohydrates_100g"),
+      fat:      pick("fat_serving", "fat_100g")
+    };
+
+    res.json(result);
+  } catch (err) {
+    res.status(err.response?.status || 500).json({
+      error: "OFF proxy failed",
+      details: err.message,
+      off: err.response?.data || null
+    });
+  }
+});
+
+
 const port = process.env.PORT || 8080;
 app.listen(port, () => console.log(`USDA proxy listening on http://localhost:${port}`));

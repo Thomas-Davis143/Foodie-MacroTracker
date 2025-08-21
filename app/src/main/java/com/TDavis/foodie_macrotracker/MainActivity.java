@@ -39,6 +39,31 @@ import com.TDavis.foodie_macrotracker.net.UsdaProxyService;
 import com.TDavis.foodie_macrotracker.net.models.FoodItem;
 import com.TDavis.foodie_macrotracker.net.models.FoodSearchResponse;
 
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanner;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning;
+import com.google.mlkit.vision.barcode.common.Barcode;
+
+import com.TDavis.foodie_macrotracker.net.RetroFitProvider;
+import com.TDavis.foodie_macrotracker.net.UsdaProxyService;
+import com.TDavis.foodie_macrotracker.net.models.FoodItem;
+import com.TDavis.foodie_macrotracker.net.models.FoodSearchResponse;
+
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
+import com.TDavis.foodie_macrotracker.net.models.BarcodeResult;
+import com.TDavis.foodie_macrotracker.net.models.FoodItem;
+import com.TDavis.foodie_macrotracker.net.models.FoodSearchResponse;
+import com.TDavis.foodie_macrotracker.net.UsdaProxyService;
+import com.TDavis.foodie_macrotracker.net.RetroFitProvider;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
+
+
 
 public class MainActivity extends AppCompatActivity {
 
@@ -68,6 +93,8 @@ public class MainActivity extends AppCompatActivity {
     String currentDate; // yyyy-MM-dd we’re viewing
     ArrayList<FoodEntry> displayEntries = new ArrayList<>(); // what the adapter shows (today or history)
     boolean searchMode = false;
+
+    GmsBarcodeScanner barcodeScanner;
 
 
 
@@ -103,6 +130,32 @@ public class MainActivity extends AppCompatActivity {
 
         btnPrevDay = findViewById(R.id.btnPrevDay);
         btnNextDay = findViewById(R.id.btnNextDay);
+
+        Button btnScan = findViewById(R.id.btnScan);
+
+        // Scanner setup (UPC/EAN)
+        GmsBarcodeScannerOptions opts = new GmsBarcodeScannerOptions.Builder()
+                .setBarcodeFormats(
+                        Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E,
+                        Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8)
+                .enableAutoZoom()
+                .build();
+        barcodeScanner = GmsBarcodeScanning.getClient(this, opts);
+
+        // Click -> scan -> search by code
+        btnScan.setOnClickListener(v -> {
+            if (!currentDate.equals(getTodayString())) { toast("Switch to Today to scan."); return; }
+            barcodeScanner.startScan()
+                    .addOnSuccessListener(b -> {
+                        String code = b.getRawValue();
+                        if (code == null || code.trim().isEmpty()) { toast("No code read."); return; }
+                        etFood.setText(code); // show code briefly; we’ll replace with description
+                        etCalories.setText(""); etProtein.setText(""); etCarbs.setText(""); etFat.setText("");
+                        searchByBarcode(code.trim());
+                    })
+                    .addOnFailureListener(e -> toast("Scan cancelled"));
+        });
+
 
         TextWatcher watcher = new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -536,7 +589,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void searchAndPopulate() {
-        // Only allow searching on today
         if (!currentDate.equals(getTodayString())) {
             toast("Switch to Today to search/add.");
             return;
@@ -545,7 +597,6 @@ public class MainActivity extends AppCompatActivity {
         String query = etFood.getText() == null ? "" : etFood.getText().toString().trim();
         if (query.isEmpty()) { toast("Enter a food name to search."); return; }
 
-        // UI: loading state
         btnAdd.setEnabled(false);
         btnAdd.setText("Searching…");
 
@@ -565,7 +616,6 @@ public class MainActivity extends AppCompatActivity {
 
                 java.util.List<com.TDavis.foodie_macrotracker.net.models.FoodItem> list = resp.body().items;
 
-                // If multiple results, let the user pick one (show up to 10)
                 if (list.size() > 1) {
                     java.util.List<com.TDavis.foodie_macrotracker.net.models.FoodItem> show =
                             list.subList(0, Math.min(10, list.size()));
@@ -583,11 +633,19 @@ public class MainActivity extends AppCompatActivity {
                             .setTitle("Pick a match")
                             .setItems(labels.toArray(new String[0]), (d, which) -> {
                                 com.TDavis.foodie_macrotracker.net.models.FoodItem best = show.get(which);
-                                // Populate fields (round to ints)
+
+                                // NEW: set Food name to brand + description
+                                String chosenName = ((best.brand != null && !best.brand.isEmpty()) ? best.brand + " " : "")
+                                        + (best.description != null ? best.description : "");
+                                chosenName = chosenName.trim();
+                                if (!chosenName.isEmpty()) etFood.setText(chosenName);
+
+                                // Populate macros
                                 etCalories.setText(best.calories == null ? "" : String.valueOf((int)Math.round(best.calories)));
                                 etProtein.setText(best.protein == null ? "" : String.valueOf((int)Math.round(best.protein)));
                                 etCarbs.setText(best.carbs == null ? "" : String.valueOf((int)Math.round(best.carbs)));
                                 etFat.setText(best.fat == null ? "" : String.valueOf((int)Math.round(best.fat)));
+
                                 btnAdd.setText("Add Entry");
                                 toast("Filled from USDA.");
                                 updateAddButtonLabel();
@@ -600,8 +658,15 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
 
-                // Single best result: populate directly
+                // Single result → set name + macros
                 com.TDavis.foodie_macrotracker.net.models.FoodItem best = list.get(0);
+
+                // NEW: set Food name to brand + description
+                String chosenName = ((best.brand != null && !best.brand.isEmpty()) ? best.brand + " " : "")
+                        + (best.description != null ? best.description : "");
+                chosenName = chosenName.trim();
+                if (!chosenName.isEmpty()) etFood.setText(chosenName);
+
                 etCalories.setText(best.calories == null ? "" : String.valueOf((int)Math.round(best.calories)));
                 etProtein.setText(best.protein == null ? "" : String.valueOf((int)Math.round(best.protein)));
                 etCarbs.setText(best.carbs == null ? "" : String.valueOf((int)Math.round(best.carbs)));
@@ -620,6 +685,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
+
 
 
     private void showSearchResults(java.util.List<FoodItem> items) {
@@ -646,6 +712,96 @@ public class MainActivity extends AppCompatActivity {
                 .setNegativeButton("Cancel", null)
                 .show();
     }
+
+    private void searchByBarcode(String code) {
+        btnAdd.setEnabled(false);
+        btnAdd.setText("Searching…");
+
+        UsdaProxyService api = RetroFitProvider.get();
+        api.getByBarcode(code).enqueue(new Callback<BarcodeResult>() {
+            @Override public void onResponse(Call<BarcodeResult> call, Response<BarcodeResult> resp) {
+                btnAdd.setEnabled(true);
+
+                if (!resp.isSuccessful() || resp.body() == null) {
+                    btnAdd.setText("Search");
+                    toast("No product found for code.");
+                    updateAddButtonLabel();
+                    return;
+                }
+
+                BarcodeResult r = resp.body();
+
+                // Prefer nice name if available; otherwise keep the code in the field
+                String niceName = ((r.brand != null ? r.brand + " " : "") +
+                        (r.description != null ? r.description : "")).trim();
+                if (!niceName.isEmpty()) etFood.setText(niceName);
+
+                // Populate macros (round to ints if present)
+                if (r.calories != null) etCalories.setText(String.valueOf((int)Math.round(r.calories)));
+                if (r.protein  != null) etProtein.setText(String.valueOf((int)Math.round(r.protein)));
+                if (r.carbs    != null) etCarbs.setText(String.valueOf((int)Math.round(r.carbs)));
+                if (r.fat      != null) etFat.setText(String.valueOf((int)Math.round(r.fat)));
+
+                boolean gotAnyMacro = r.calories != null || r.protein != null || r.carbs != null || r.fat != null;
+                if (gotAnyMacro) {
+                    btnAdd.setText("Add Entry");
+                    toast("Filled from barcode.");
+                    updateAddButtonLabel();
+                    return;
+                }
+
+                // Fallback: if OFF had only the name, try USDA text search by description
+                if (r.description != null && !r.description.trim().isEmpty()) {
+                    api.searchFoods(r.description.trim(), 10, 1).enqueue(new Callback<FoodSearchResponse>() {
+                        @Override public void onResponse(Call<FoodSearchResponse> call2, Response<FoodSearchResponse> resp2) {
+                            if (!resp2.isSuccessful() || resp2.body() == null || resp2.body().items == null || resp2.body().items.isEmpty()) {
+                                btnAdd.setText("Search");
+                                toast("No nutrition found for this product.");
+                                updateAddButtonLabel();
+                                return;
+                            }
+                            // pick best USDA match
+                            FoodItem best = null; int scoreMax = -1;
+                            for (FoodItem it : resp2.body().items) {
+                                int s = (it.calories!=null?2:0) + (it.protein!=null?1:0) + (it.carbs!=null?1:0) + (it.fat!=null?1:0);
+                                if (s > scoreMax) { scoreMax = s; best = it; }
+                            }
+                            if (best != null) {
+                                if (best.calories != null) etCalories.setText(String.valueOf((int)Math.round(best.calories)));
+                                if (best.protein  != null) etProtein.setText(String.valueOf((int)Math.round(best.protein)));
+                                if (best.carbs    != null) etCarbs.setText(String.valueOf((int)Math.round(best.carbs)));
+                                if (best.fat      != null) etFat.setText(String.valueOf((int)Math.round(best.fat)));
+                                btnAdd.setText("Add Entry");
+                                toast("Filled via USDA.");
+                                updateAddButtonLabel();
+                            } else {
+                                btnAdd.setText("Search");
+                                toast("No nutrition found.");
+                                updateAddButtonLabel();
+                            }
+                        }
+                        @Override public void onFailure(Call<FoodSearchResponse> call2, Throwable t2) {
+                            btnAdd.setText("Search");
+                            toast("Lookup failed (USDA).");
+                            updateAddButtonLabel();
+                        }
+                    });
+                } else {
+                    btnAdd.setText("Search");
+                    toast("No nutrition found for this code.");
+                    updateAddButtonLabel();
+                }
+            }
+
+            @Override public void onFailure(Call<BarcodeResult> call, Throwable t) {
+                btnAdd.setEnabled(true);
+                btnAdd.setText("Search");
+                toast("Barcode lookup failed. Check connection/server.");
+                updateAddButtonLabel();
+            }
+        });
+    }
+
 
 
 }
