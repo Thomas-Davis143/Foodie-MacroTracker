@@ -5,12 +5,15 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -20,6 +23,8 @@ import androidx.appcompat.app.AppCompatDelegate;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.material.textfield.MaterialAutoCompleteTextView;
+import com.google.android.material.textfield.TextInputEditText;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
@@ -29,16 +34,6 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.Locale;
 
-import android.text.Editable;
-import android.text.TextWatcher;
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Response;
-import com.TDavis.foodie_macrotracker.net.RetroFitProvider;
-import com.TDavis.foodie_macrotracker.net.UsdaProxyService;
-import com.TDavis.foodie_macrotracker.net.models.FoodItem;
-import com.TDavis.foodie_macrotracker.net.models.FoodSearchResponse;
-
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanner;
 import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions;
 import com.google.mlkit.vision.codescanner.GmsBarcodeScanning;
@@ -46,24 +41,10 @@ import com.google.mlkit.vision.barcode.common.Barcode;
 
 import com.TDavis.foodie_macrotracker.net.RetroFitProvider;
 import com.TDavis.foodie_macrotracker.net.UsdaProxyService;
-import com.TDavis.foodie_macrotracker.net.models.FoodItem;
-import com.TDavis.foodie_macrotracker.net.models.FoodSearchResponse;
 
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
-
-import com.TDavis.foodie_macrotracker.net.models.BarcodeResult;
-import com.TDavis.foodie_macrotracker.net.models.FoodItem;
-import com.TDavis.foodie_macrotracker.net.models.FoodSearchResponse;
-import com.TDavis.foodie_macrotracker.net.UsdaProxyService;
-import com.TDavis.foodie_macrotracker.net.RetroFitProvider;
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Response;
-
-
-
 
 public class MainActivity extends AppCompatActivity {
 
@@ -94,9 +75,47 @@ public class MainActivity extends AppCompatActivity {
     ArrayList<FoodEntry> displayEntries = new ArrayList<>(); // what the adapter shows (today or history)
     boolean searchMode = false;
 
+    // Scanner
     GmsBarcodeScanner barcodeScanner;
 
+    // Collapsible nutrition card
+    private View nutritionCard, nutritionHeader, nutritionContent;
+    private ImageView ivChevron;
 
+    // Serving scaling UI
+    private MaterialAutoCompleteTextView actvUnit;
+    private TextInputEditText etQuantity;
+
+    // === Scaling state (per normalized proxy) ===
+    private ArrayList<Unit> unitList = new ArrayList<>();
+    private Unit selectedUnit;
+    private Per100g basePer100g = new Per100g();
+
+    // === Models matching normalized proxy (keep here for simplicity) ===
+    public static class Unit { public String label; public double gramsPerUnit; }
+    public static class Per100g { public Integer calories; public Double protein, carbs, fat; }
+    public static class PerServing { public Integer calories; public Double protein, carbs, fat; public Double grams; }
+    public static class Servings { public Per100g per100g; public PerServing perServing; }
+    public static class NormalizedFoodItem {
+        public long fdcId;
+        public String description;
+        public String brandName;
+        public Servings servings;
+        public ArrayList<Unit> units;
+    }
+    public static class FoodSearchResponseV2 {
+        public int totalHits;
+        public int pageNumber;
+        public ArrayList<NormalizedFoodItem> items;
+    }
+    public static class BarcodeLookupResponse {
+        public NormalizedFoodItem item;
+    }
+
+    // ---- small utils ----
+    private static double parseD(CharSequence s, double fb){ try { return Double.parseDouble(String.valueOf(s).trim()); } catch(Exception e){ return fb; } }
+    private static int r0(double v){ return (int)Math.round(v); }
+    private static double r1(double v){ return Math.round(v*10.0)/10.0; }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -133,6 +152,21 @@ public class MainActivity extends AppCompatActivity {
 
         Button btnScan = findViewById(R.id.btnScan);
 
+        nutritionCard    = findViewById(R.id.nutritionCard);
+        nutritionHeader  = findViewById(R.id.nutritionHeader);
+        nutritionContent = findViewById(R.id.nutritionContent);
+        ivChevron        = findViewById(R.id.ivChevron);
+
+        etQuantity = findViewById(R.id.etQuantity);
+        actvUnit   = findViewById(R.id.actvUnit);
+
+        // Collapse/expand
+        nutritionHeader.setOnClickListener(v -> {
+            boolean expand = nutritionContent.getVisibility() != View.VISIBLE;
+            nutritionContent.setVisibility(expand ? View.VISIBLE : View.GONE);
+            ivChevron.setRotation(expand ? 180f : 0f);
+        });
+
         // Scanner setup (UPC/EAN)
         GmsBarcodeScannerOptions opts = new GmsBarcodeScannerOptions.Builder()
                 .setBarcodeFormats(
@@ -142,21 +176,21 @@ public class MainActivity extends AppCompatActivity {
                 .build();
         barcodeScanner = GmsBarcodeScanning.getClient(this, opts);
 
-        // Click -> scan -> search by code
+        // Click -> scan -> barcode lookup
         btnScan.setOnClickListener(v -> {
             if (!currentDate.equals(getTodayString())) { toast("Switch to Today to scan."); return; }
             barcodeScanner.startScan()
                     .addOnSuccessListener(b -> {
                         String code = b.getRawValue();
                         if (code == null || code.trim().isEmpty()) { toast("No code read."); return; }
-                        etFood.setText(code); // show code briefly; we’ll replace with description
+                        etFood.setText(code); // temporary
                         etCalories.setText(""); etProtein.setText(""); etCarbs.setText(""); etFat.setText("");
                         searchByBarcode(code.trim());
                     })
                     .addOnFailureListener(e -> toast("Scan cancelled"));
         });
 
-
+        // Inputs watcher to toggle Search/Add label
         TextWatcher watcher = new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) { updateAddButtonLabel(); }
@@ -167,11 +201,7 @@ public class MainActivity extends AppCompatActivity {
         etProtein.addTextChangedListener(watcher);
         etCarbs.addTextChangedListener(watcher);
         etFat.addTextChangedListener(watcher);
-
-// initial label
         updateAddButtonLabel();
-
-
 
         // Meal type spinner data
         ArrayAdapter<CharSequence> mealAdapter = ArrayAdapter.createFromResource(
@@ -179,41 +209,32 @@ public class MainActivity extends AppCompatActivity {
         mealAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spMealType.setAdapter(mealAdapter);
 
-        // -- RecyclerView with collapsible sections --
+        // RecyclerView
         rvEntries  = findViewById(R.id.rvEntries);
         adapter    = new SectionedEntryAdapter();
         rvEntries.setLayoutManager(new LinearLayoutManager(this));
         rvEntries.setAdapter(adapter);
 
-        // Tap to edit
         adapter.setOnItemClickListener(this::showEditDialog);
-        // Long-press to delete
         adapter.setOnItemLongClickListener(this::confirmDelete);
 
-        // -- Buttons/IME --
+        // Buttons/IME
         btnClear.setOnClickListener(v -> clearAllData());
-        btnAdd.setOnClickListener(v -> {
-            if (searchMode) {
-                searchAndPopulate();
-            } else {
-                addEntry();
-            }
-        });
-
+        btnAdd.setOnClickListener(v -> { if (searchMode) searchAndPopulate(); else addEntry(); });
         btnSettings.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
         etFat.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_DONE) { addEntry(); return true; }
             return false;
         });
 
-        // -- Load goals, set progress maxes --
+        // Goals + progress
         loadGoals();
         pbCalories.setMax(goalCal);
         pbProtein.setMax(goalPro);
         pbCarbs.setMax(goalCar);
         pbFat.setMax(goalFat);
 
-        // -- Load data + set date header --
+        // Data + date header
         loadData();
         currentDate = getTodayString();
         refreshForDate(currentDate);
@@ -222,18 +243,18 @@ public class MainActivity extends AppCompatActivity {
             currentDate = shiftDateString(currentDate, -1);
             refreshForDate(currentDate);
         });
-
         btnNextDay.setOnClickListener(v -> {
             currentDate = shiftDateString(currentDate, +1);
             refreshForDate(currentDate);
         });
 
+        // === Serving scaling UI (default gram/oz + listeners) ===
+        setupScalingUi();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        // When returning from Settings, re-apply theme + goals
         applySavedTheme();
         loadGoals();
         pbCalories.setMax(goalCal);
@@ -381,7 +402,6 @@ public class MainActivity extends AppCompatActivity {
         SharedPreferences.Editor editor = prefs.edit();
         Gson gson = new Gson();
 
-        // store today's entries/totals (existing behavior)
         String json = gson.toJson(entries);
         editor.putString("entries", json);
         editor.putInt("totalCalories", totalCalories);
@@ -392,7 +412,7 @@ public class MainActivity extends AppCompatActivity {
         editor.putString("lastSavedDate", today);
         editor.apply();
 
-        // NEW: mirror into "history" map keyed by date
+        // Mirror into "history" map keyed by date
         java.lang.reflect.Type mapType = new com.google.gson.reflect.TypeToken<java.util.HashMap<String, java.util.ArrayList<FoodEntry>>>(){}.getType();
         String hJson = prefs.getString("history", null);
         java.util.HashMap<String, java.util.ArrayList<FoodEntry>> history =
@@ -400,7 +420,6 @@ public class MainActivity extends AppCompatActivity {
         history.put(today, new java.util.ArrayList<>(entries));
         prefs.edit().putString("history", gson.toJson(history)).apply();
     }
-
 
     private void loadData() {
         SharedPreferences prefs = getSharedPreferences("FoodiePrefs", MODE_PRIVATE);
@@ -497,7 +516,7 @@ public class MainActivity extends AppCompatActivity {
         return new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(new Date());
     }
 
-    // Refresh UI for a given date (today = live/editable, past/future = view-only)
+    // Refresh UI for a given date
     private void refreshForDate(String date) {
         tvDate.setText("Entries for " + date);
 
@@ -588,6 +607,57 @@ public class MainActivity extends AppCompatActivity {
         btnAdd.setText(searchMode ? "Search" : "Add Entry");
     }
 
+    /* ==============================  SCALING UI  ============================== */
+
+    private void setupScalingUi() {
+        // Default units before any result arrives
+        unitList.clear();
+        Unit g = new Unit(); g.label="gram (g)"; g.gramsPerUnit=1.0; unitList.add(g);
+        Unit oz = new Unit(); oz.label="ounce (oz)"; oz.gramsPerUnit=28.3495; unitList.add(oz);
+        setUnitsAdapterAndSelect(0);
+
+        if (etQuantity.getText()==null || etQuantity.getText().length()==0) etQuantity.setText("1");
+
+        etQuantity.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s,int a,int b,int c){}
+            @Override public void onTextChanged(CharSequence s,int a,int b,int c){}
+            @Override public void afterTextChanged(Editable s){ recomputeAndRender(); }
+        });
+
+        actvUnit.setOnItemClickListener((parent, view, position, id) -> {
+            selectedUnit = unitList.get(position);
+            recomputeAndRender();
+        });
+    }
+
+    private void setUnitsAdapterAndSelect(int index) {
+        ArrayList<String> labels = new ArrayList<>();
+        for (Unit u : unitList) labels.add(u.label);
+        ArrayAdapter<String> ad = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, labels);
+        actvUnit.setAdapter(ad);
+        index = Math.max(0, Math.min(index, unitList.size()-1));
+        selectedUnit = unitList.get(index);
+        actvUnit.setText(selectedUnit.label, false);
+    }
+
+    private void recomputeAndRender() {
+        if (selectedUnit == null || basePer100g == null) return;
+
+        double qty = parseD(etQuantity.getText()==null? "" : etQuantity.getText(), 1.0);
+        if (qty <= 0) qty = 1.0;
+        double grams = qty * selectedUnit.gramsPerUnit;
+
+        Double cal100 = (basePer100g.calories==null? null : basePer100g.calories.doubleValue());
+        Double pro100 = basePer100g.protein, carb100 = basePer100g.carbs, fat100 = basePer100g.fat;
+
+        etCalories.setText(cal100==null? "" : String.valueOf(r0(cal100 * grams / 100.0)));
+        etProtein .setText(pro100==null? "" : String.valueOf(r1(pro100 * grams / 100.0)));
+        etCarbs   .setText(carb100==null? "" : String.valueOf(r1(carb100 * grams / 100.0)));
+        etFat     .setText(fat100==null? "" : String.valueOf(r1(fat100 * grams / 100.0)));
+    }
+
+    /* ==============================  SEARCH  ============================== */
+
     private void searchAndPopulate() {
         if (!currentDate.equals(getTodayString())) {
             toast("Switch to Today to search/add.");
@@ -601,10 +671,9 @@ public class MainActivity extends AppCompatActivity {
         btnAdd.setText("Searching…");
 
         UsdaProxyService api = RetroFitProvider.get();
-        api.searchFoods(query, 10, 1).enqueue(new retrofit2.Callback<com.TDavis.foodie_macrotracker.net.models.FoodSearchResponse>() {
+        api.searchFoodsNormalized(query, 10, 1).enqueue(new Callback<FoodSearchResponseV2>() {
             @Override
-            public void onResponse(retrofit2.Call<com.TDavis.foodie_macrotracker.net.models.FoodSearchResponse> call,
-                                   retrofit2.Response<com.TDavis.foodie_macrotracker.net.models.FoodSearchResponse> resp) {
+            public void onResponse(Call<FoodSearchResponseV2> call, Response<FoodSearchResponseV2> resp) {
                 btnAdd.setEnabled(true);
 
                 if (!resp.isSuccessful() || resp.body() == null || resp.body().items == null || resp.body().items.isEmpty()) {
@@ -614,41 +683,25 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
 
-                java.util.List<com.TDavis.foodie_macrotracker.net.models.FoodItem> list = resp.body().items;
+                ArrayList<NormalizedFoodItem> list = resp.body().items;
 
                 if (list.size() > 1) {
-                    java.util.List<com.TDavis.foodie_macrotracker.net.models.FoodItem> show =
-                            list.subList(0, Math.min(10, list.size()));
-
-                    java.util.ArrayList<String> labels = new java.util.ArrayList<>();
-                    for (com.TDavis.foodie_macrotracker.net.models.FoodItem f : show) {
-                        String brand = (f.brand == null || f.brand.isEmpty()) ? "" : " • " + f.brand;
-                        String serving = (f.servingSize == null) ? "" :
-                                " • " + (int)Math.round(f.servingSize) + (f.servingSizeUnit == null ? "" : f.servingSizeUnit);
-                        String kcal = (f.calories != null) ? (" — " + (int)Math.round(f.calories) + " kcal") : "";
-                        labels.add(f.description + brand + serving + kcal);
+                    ArrayList<NormalizedFoodItem> show = new ArrayList<>(list.subList(0, Math.min(10, list.size())));
+                    ArrayList<String> labels = new ArrayList<>();
+                    for (NormalizedFoodItem f : show) {
+                        String brand = (f.brandName == null || f.brandName.isEmpty()) ? "" : " • " + f.brandName;
+                        String serv = (f.servings!=null && f.servings.perServing!=null && f.servings.perServing.grams!=null)
+                                ? (" • " + r0(f.servings.perServing.grams) + "g serving") : "";
+                        String kcal100 = (f.servings!=null && f.servings.per100g!=null && f.servings.per100g.calories!=null)
+                                ? (" — " + f.servings.per100g.calories + " kcal/100g") : "";
+                        labels.add(f.description + brand + serv + kcal100);
                     }
 
                     new androidx.appcompat.app.AlertDialog.Builder(MainActivity.this)
                             .setTitle("Pick a match")
                             .setItems(labels.toArray(new String[0]), (d, which) -> {
-                                com.TDavis.foodie_macrotracker.net.models.FoodItem best = show.get(which);
-
-                                // NEW: set Food name to brand + description
-                                String chosenName = ((best.brand != null && !best.brand.isEmpty()) ? best.brand + " " : "")
-                                        + (best.description != null ? best.description : "");
-                                chosenName = chosenName.trim();
-                                if (!chosenName.isEmpty()) etFood.setText(chosenName);
-
-                                // Populate macros
-                                etCalories.setText(best.calories == null ? "" : String.valueOf((int)Math.round(best.calories)));
-                                etProtein.setText(best.protein == null ? "" : String.valueOf((int)Math.round(best.protein)));
-                                etCarbs.setText(best.carbs == null ? "" : String.valueOf((int)Math.round(best.carbs)));
-                                etFat.setText(best.fat == null ? "" : String.valueOf((int)Math.round(best.fat)));
-
-                                btnAdd.setText("Add Entry");
-                                toast("Filled from USDA.");
-                                updateAddButtonLabel();
+                                NormalizedFoodItem best = show.get(which);
+                                applyChosenFood(best);
                             })
                             .setNegativeButton("Cancel", (d, w) -> {
                                 btnAdd.setText("Search");
@@ -658,26 +711,12 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
 
-                // Single result → set name + macros
-                com.TDavis.foodie_macrotracker.net.models.FoodItem best = list.get(0);
-
-                // NEW: set Food name to brand + description
-                String chosenName = ((best.brand != null && !best.brand.isEmpty()) ? best.brand + " " : "")
-                        + (best.description != null ? best.description : "");
-                chosenName = chosenName.trim();
-                if (!chosenName.isEmpty()) etFood.setText(chosenName);
-
-                etCalories.setText(best.calories == null ? "" : String.valueOf((int)Math.round(best.calories)));
-                etProtein.setText(best.protein == null ? "" : String.valueOf((int)Math.round(best.protein)));
-                etCarbs.setText(best.carbs == null ? "" : String.valueOf((int)Math.round(best.carbs)));
-                etFat.setText(best.fat == null ? "" : String.valueOf((int)Math.round(best.fat)));
-                btnAdd.setText("Add Entry");
-                toast("Filled from USDA.");
-                updateAddButtonLabel();
+                // Single result
+                applyChosenFood(list.get(0));
             }
 
             @Override
-            public void onFailure(retrofit2.Call<com.TDavis.foodie_macrotracker.net.models.FoodSearchResponse> call, Throwable t) {
+            public void onFailure(Call<FoodSearchResponseV2> call, Throwable t) {
                 btnAdd.setEnabled(true);
                 btnAdd.setText("Search");
                 toast("Search failed. Check connection/server.");
@@ -686,114 +725,61 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    private void applyChosenFood(NormalizedFoodItem best) {
+        // Name
+        String chosenName = ((best.brandName != null && !best.brandName.isEmpty()) ? best.brandName + " " : "")
+                + (best.description != null ? best.description : "");
+        chosenName = chosenName.trim();
+        if (!chosenName.isEmpty()) etFood.setText(chosenName);
 
-
-    private void showSearchResults(java.util.List<FoodItem> items) {
-        java.util.ArrayList<String> labels = new java.util.ArrayList<>();
-        for (FoodItem f : items) {
-            String brand = (f.brand == null ? "" : " • " + f.brand);
-            String serving = (f.servingSize == null ? "" : " • " + (int)Math.round(f.servingSize) + (f.servingSizeUnit==null?"":f.servingSizeUnit));
-            String line = f.description + brand + serving +
-                    (f.calories!=null ? (" — " + (int)Math.round(f.calories) + " kcal") : "");
-            labels.add(line);
+        // Base per-100g
+        if (best.servings != null && best.servings.per100g != null) {
+            basePer100g = best.servings.per100g;
+        } else {
+            basePer100g = new Per100g();
         }
 
-        new androidx.appcompat.app.AlertDialog.Builder(this)
-                .setTitle("Pick a match")
-                .setItems(labels.toArray(new String[0]), (d, which) -> {
-                    FoodItem best = items.get(which);
-                    etCalories.setText(best.calories==null? "" : String.valueOf((int)Math.round(best.calories)));
-                    etProtein.setText(best.protein==null? "" : String.valueOf((int)Math.round(best.protein)));
-                    etCarbs.setText(best.carbs==null? "" : String.valueOf((int)Math.round(best.carbs)));
-                    etFat.setText(best.fat==null? "" : String.valueOf((int)Math.round(best.fat)));
-                    toast("Filled from USDA.");
-                    updateAddButtonLabel(); // now shows "Add Entry"
-                })
-                .setNegativeButton("Cancel", null)
-                .show();
+        // Units (gram/oz always present; plus serving/household measures when available)
+        unitList = (best.units != null) ? best.units : new ArrayList<>();
+        int defaultIndex = 0;
+        for (int i = 0; i < unitList.size(); i++) {
+            if ("serving".equalsIgnoreCase(unitList.get(i).label)) { defaultIndex = i; break; }
+        }
+        setUnitsAdapterAndSelect(defaultIndex);
+
+        // Default qty
+        if (etQuantity.getText() == null || etQuantity.getText().length() == 0) etQuantity.setText("1");
+
+        // Render scaled macros now
+        recomputeAndRender();
+
+        btnAdd.setText("Add Entry");
+        toast("Filled from USDA.");
+        updateAddButtonLabel();
     }
+
+    /* ==============================  BARCODE  ============================== */
 
     private void searchByBarcode(String code) {
         btnAdd.setEnabled(false);
         btnAdd.setText("Searching…");
 
         UsdaProxyService api = RetroFitProvider.get();
-        api.getByBarcode(code).enqueue(new Callback<BarcodeResult>() {
-            @Override public void onResponse(Call<BarcodeResult> call, Response<BarcodeResult> resp) {
+        api.getByBarcodeNormalized(code).enqueue(new Callback<BarcodeLookupResponse>() {
+            @Override public void onResponse(Call<BarcodeLookupResponse> call, Response<BarcodeLookupResponse> resp) {
                 btnAdd.setEnabled(true);
 
-                if (!resp.isSuccessful() || resp.body() == null) {
+                if (!resp.isSuccessful() || resp.body()==null || resp.body().item==null) {
                     btnAdd.setText("Search");
                     toast("No product found for code.");
                     updateAddButtonLabel();
                     return;
                 }
 
-                BarcodeResult r = resp.body();
-
-                // Prefer nice name if available; otherwise keep the code in the field
-                String niceName = ((r.brand != null ? r.brand + " " : "") +
-                        (r.description != null ? r.description : "")).trim();
-                if (!niceName.isEmpty()) etFood.setText(niceName);
-
-                // Populate macros (round to ints if present)
-                if (r.calories != null) etCalories.setText(String.valueOf((int)Math.round(r.calories)));
-                if (r.protein  != null) etProtein.setText(String.valueOf((int)Math.round(r.protein)));
-                if (r.carbs    != null) etCarbs.setText(String.valueOf((int)Math.round(r.carbs)));
-                if (r.fat      != null) etFat.setText(String.valueOf((int)Math.round(r.fat)));
-
-                boolean gotAnyMacro = r.calories != null || r.protein != null || r.carbs != null || r.fat != null;
-                if (gotAnyMacro) {
-                    btnAdd.setText("Add Entry");
-                    toast("Filled from barcode.");
-                    updateAddButtonLabel();
-                    return;
-                }
-
-                // Fallback: if OFF had only the name, try USDA text search by description
-                if (r.description != null && !r.description.trim().isEmpty()) {
-                    api.searchFoods(r.description.trim(), 10, 1).enqueue(new Callback<FoodSearchResponse>() {
-                        @Override public void onResponse(Call<FoodSearchResponse> call2, Response<FoodSearchResponse> resp2) {
-                            if (!resp2.isSuccessful() || resp2.body() == null || resp2.body().items == null || resp2.body().items.isEmpty()) {
-                                btnAdd.setText("Search");
-                                toast("No nutrition found for this product.");
-                                updateAddButtonLabel();
-                                return;
-                            }
-                            // pick best USDA match
-                            FoodItem best = null; int scoreMax = -1;
-                            for (FoodItem it : resp2.body().items) {
-                                int s = (it.calories!=null?2:0) + (it.protein!=null?1:0) + (it.carbs!=null?1:0) + (it.fat!=null?1:0);
-                                if (s > scoreMax) { scoreMax = s; best = it; }
-                            }
-                            if (best != null) {
-                                if (best.calories != null) etCalories.setText(String.valueOf((int)Math.round(best.calories)));
-                                if (best.protein  != null) etProtein.setText(String.valueOf((int)Math.round(best.protein)));
-                                if (best.carbs    != null) etCarbs.setText(String.valueOf((int)Math.round(best.carbs)));
-                                if (best.fat      != null) etFat.setText(String.valueOf((int)Math.round(best.fat)));
-                                btnAdd.setText("Add Entry");
-                                toast("Filled via USDA.");
-                                updateAddButtonLabel();
-                            } else {
-                                btnAdd.setText("Search");
-                                toast("No nutrition found.");
-                                updateAddButtonLabel();
-                            }
-                        }
-                        @Override public void onFailure(Call<FoodSearchResponse> call2, Throwable t2) {
-                            btnAdd.setText("Search");
-                            toast("Lookup failed (USDA).");
-                            updateAddButtonLabel();
-                        }
-                    });
-                } else {
-                    btnAdd.setText("Search");
-                    toast("No nutrition found for this code.");
-                    updateAddButtonLabel();
-                }
+                applyChosenFood(resp.body().item);
             }
 
-            @Override public void onFailure(Call<BarcodeResult> call, Throwable t) {
+            @Override public void onFailure(Call<BarcodeLookupResponse> call, Throwable t) {
                 btnAdd.setEnabled(true);
                 btnAdd.setText("Search");
                 toast("Barcode lookup failed. Check connection/server.");
@@ -801,7 +787,4 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
-
-
-
 }
