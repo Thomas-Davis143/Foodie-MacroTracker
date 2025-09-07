@@ -46,6 +46,10 @@ import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
 
+import android.app.DatePickerDialog;
+import java.util.Calendar;
+
+
 public class MainActivity extends AppCompatActivity {
 
     // Inputs + UI
@@ -135,6 +139,7 @@ public class MainActivity extends AppCompatActivity {
         btnSettings= findViewById(R.id.btnSettings);
         tvTotals   = findViewById(R.id.tvTotals);
         tvDate     = findViewById(R.id.tvDate);
+        tvDate.setOnClickListener(v -> showDatePicker());
         spMealType = findViewById(R.id.spMealType);
 
         tvCalorieProgress = findViewById(R.id.tvCalorieProgress);
@@ -725,6 +730,15 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    // === Set EXACT macros from API's perServing block (no recompute drift) ===
+    private void setMacrosFromPerServing(PerServing p) {
+        if (p == null) return;
+        etCalories.setText(p.calories != null ? String.valueOf(p.calories) : "");
+        etProtein .setText(p.protein  != null ? String.valueOf(r1(p.protein)) : "");
+        etCarbs   .setText(p.carbs    != null ? String.valueOf(r1(p.carbs))   : "");
+        etFat     .setText(p.fat      != null ? String.valueOf(r1(p.fat))     : "");
+    }
+
     private void applyChosenFood(NormalizedFoodItem best) {
         // Name
         String chosenName = ((best.brandName != null && !best.brandName.isEmpty()) ? best.brandName + " " : "")
@@ -732,26 +746,56 @@ public class MainActivity extends AppCompatActivity {
         chosenName = chosenName.trim();
         if (!chosenName.isEmpty()) etFood.setText(chosenName);
 
-        // Base per-100g
+        // Base per-100g for later scaling
         if (best.servings != null && best.servings.per100g != null) {
             basePer100g = best.servings.per100g;
         } else {
             basePer100g = new Per100g();
         }
 
-        // Units (gram/oz always present; plus serving/household measures when available)
+        // Units (gram/oz always present; plus serving/household measures)
         unitList = (best.units != null) ? best.units : new ArrayList<>();
-        int defaultIndex = 0;
-        for (int i = 0; i < unitList.size(); i++) {
-            if ("serving".equalsIgnoreCase(unitList.get(i).label)) { defaultIndex = i; break; }
+
+        // Mirror EXACT serving that the API returned
+        Double servingGrams = (best.servings != null && best.servings.perServing != null)
+                ? best.servings.perServing.grams : null;
+
+        if (servingGrams != null && servingGrams > 0) {
+            // Prefer explicit "serving" unit with qty = 1
+            int servingIdx = findIndexByLabel(unitList, "serving");
+            if (servingIdx >= 0) {
+                setUnitsAdapterAndSelect(servingIdx);
+                etQuantity.setText("1");
+                setMacrosFromPerServing(best.servings.perServing); // exact
+                // do not recompute here; keep exact perServing values
+            } else {
+                // Try a household measure whose grams matches serving grams (±0.6g)
+                int matchIdx = findIndexByGrams(unitList, servingGrams, 0.6);
+                if (matchIdx >= 0) {
+                    setUnitsAdapterAndSelect(matchIdx);
+                    etQuantity.setText("1");
+                    setMacrosFromPerServing(best.servings.perServing);
+                } else {
+                    // Fall back to grams unit with qty = servingGrams
+                    int gramsIdx = indexOfUnitLabelContains("gram");
+                    if (gramsIdx < 0) gramsIdx = 0;
+                    setUnitsAdapterAndSelect(gramsIdx);
+                    etQuantity.setText(formatQtyNice(servingGrams));
+                    setMacrosFromPerServing(best.servings.perServing);
+                }
+            }
+        } else {
+            // No serving grams provided; pick a sensible default and compute from per100g
+            int idx = findIndexByLabel(unitList, "serving");
+            if (idx < 0) {
+                int nonBase = findFirstNonBaseUnit(unitList);
+                idx = (nonBase >= 0) ? nonBase : indexOfUnitLabelContains("gram");
+                if (idx < 0) idx = 0;
+            }
+            setUnitsAdapterAndSelect(idx);
+            etQuantity.setText("1");
+            recomputeAndRender(); // compute for 1 unit from per100g
         }
-        setUnitsAdapterAndSelect(defaultIndex);
-
-        // Default qty
-        if (etQuantity.getText() == null || etQuantity.getText().length() == 0) etQuantity.setText("1");
-
-        // Render scaled macros now
-        recomputeAndRender();
 
         btnAdd.setText("Add Entry");
         toast("Filled from USDA.");
@@ -787,4 +831,91 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
+
+    /* ==============================  Helpers for units ============================== */
+
+    private int findIndexByLabel(ArrayList<Unit> units, String target) {
+        if (units == null) return -1;
+        String t = target.toLowerCase(java.util.Locale.US);
+        for (int i = 0; i < units.size(); i++) {
+            String lbl = units.get(i).label == null ? "" : units.get(i).label.trim().toLowerCase(java.util.Locale.US);
+            if (lbl.equals(t) || lbl.startsWith(t)) return i;
+        }
+        // also accept contains()
+        for (int i = 0; i < units.size(); i++) {
+            String lbl = units.get(i).label == null ? "" : units.get(i).label.trim().toLowerCase(java.util.Locale.US);
+            if (lbl.contains(t)) return i;
+        }
+        return -1;
+    }
+
+    private int findIndexByGrams(ArrayList<Unit> units, double grams, double tolerance) {
+        if (units == null) return -1;
+        for (int i = 0; i < units.size(); i++) {
+            double g = units.get(i).gramsPerUnit;
+            if (Math.abs(g - grams) <= tolerance) return i;
+        }
+        return -1;
+    }
+
+    private int findFirstNonBaseUnit(ArrayList<Unit> units) {
+        if (units == null) return -1;
+        for (int i = 0; i < units.size(); i++) {
+            String lbl = units.get(i).label == null ? "" : units.get(i).label.toLowerCase(java.util.Locale.US);
+            if (!lbl.contains("gram") && !lbl.contains("ounce") && !lbl.contains("oz")) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private int indexOfUnitLabelContains(String word) {
+        if (unitList == null) return -1;
+        String w = word.toLowerCase(java.util.Locale.US);
+        for (int i = 0; i < unitList.size(); i++) {
+            String lbl = unitList.get(i).label == null ? "" : unitList.get(i).label.toLowerCase(java.util.Locale.US);
+            if (lbl.contains(w)) return i;
+        }
+        return -1;
+    }
+
+    private String formatQtyNice(double v) {
+        return (Math.abs(v - Math.round(v)) < 1e-6)
+                ? String.valueOf((int)Math.round(v))
+                : String.valueOf(v);
+    }
+
+    private void showDatePicker() {
+        // Start from the currently displayed date
+        final Calendar cal = Calendar.getInstance();
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                java.time.LocalDate d = java.time.LocalDate.parse(currentDate);
+                cal.set(d.getYear(), d.getMonthValue() - 1, d.getDayOfMonth());
+            } else {
+                java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US);
+                java.util.Date parsed = sdf.parse(currentDate);
+                if (parsed != null) cal.setTime(parsed);
+            }
+        } catch (Exception ignored) { /* fall back to today */ }
+
+        DatePickerDialog dlg = new DatePickerDialog(
+                this,
+                (view, year, month, dayOfMonth) -> {
+                    // month is 0-based in DatePicker
+                    String picked = String.format(java.util.Locale.US, "%04d-%02d-%02d", year, month + 1, dayOfMonth);
+                    currentDate = picked;
+                    refreshForDate(currentDate);
+                },
+                cal.get(Calendar.YEAR),
+                cal.get(Calendar.MONTH),
+                cal.get(Calendar.DAY_OF_MONTH)
+        );
+
+        // Don’t allow picking future days
+        dlg.getDatePicker().setMaxDate(System.currentTimeMillis());
+
+        dlg.show();
+    }
+
 }

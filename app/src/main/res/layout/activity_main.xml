@@ -83,7 +83,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"/>
 
-        <!-- NEW: Serving size controls (quantity + unit) -->
+        <!-- Serving size controls (quantity + unit) -->
         <LinearLayout
             android:id="@+id/servingRow"
             android:orientation="horizontal"
@@ -101,7 +101,7 @@
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/etQuantity"
                     android:inputType="numberDecimal"
-                    android:text="1"
+                    android:text="100"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"/>
             </com.google.android.material.textfield.TextInputLayout>
@@ -127,7 +127,7 @@
             </com.google.android.material.textfield.TextInputLayout>
         </LinearLayout>
 
-        <!-- NEW: Collapsible Nutrition Facts card wrapping your macro fields -->
+        <!-- Collapsible Nutrition Facts card -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/nutritionCard"
             android:layout_width="match_parent"
@@ -167,7 +167,7 @@
                         android:rotation="180"/>
                 </LinearLayout>
 
-                <!-- Collapsible content: your existing macro inputs -->
+                <!-- Collapsible content -->
                 <LinearLayout
                     android:id="@+id/nutritionContent"
                     android:orientation="vertical"
@@ -177,60 +177,96 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content">
 
-                    <!-- Row 1: Calories + Protein -->
+                    <!-- Row 1: Calories + Protein (floating label + suffix) -->
                     <LinearLayout
                         android:orientation="horizontal"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp">
 
-                        <EditText
-                            android:id="@+id/etCalories"
-                            android:hint="Calories"
-                            android:inputType="number"
-                            android:maxLines="1"
-                            android:imeOptions="actionNext"
-                            android:layout_weight="1"
+                        <com.google.android.material.textfield.TextInputLayout
+                            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                             android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:hint="Calories"
+                            app:suffixText="kcal">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/etCalories"
+                                android:inputType="number"
+                                android:maxLines="1"
+                                android:imeOptions="actionNext"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"/>
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <Space
+                            android:layout_width="8dp"
                             android:layout_height="wrap_content"/>
 
-                        <EditText
-                            android:id="@+id/etProtein"
-                            android:hint="Protein (g)"
-                            android:inputType="number"
-                            android:maxLines="1"
-                            android:imeOptions="actionNext"
-                            android:layout_weight="1"
+                        <com.google.android.material.textfield.TextInputLayout
+                            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                             android:layout_width="0dp"
-                            android:layout_height="wrap_content"/>
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:hint="Protein"
+                            app:suffixText="g">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/etProtein"
+                                android:inputType="numberDecimal"
+                                android:maxLines="1"
+                                android:imeOptions="actionNext"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"/>
+                        </com.google.android.material.textfield.TextInputLayout>
                     </LinearLayout>
 
-                    <!-- Row 2: Carbs + Fat -->
+                    <!-- Row 2: Carbs + Fat (floating label + suffix) -->
                     <LinearLayout
                         android:orientation="horizontal"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp">
 
-                        <EditText
-                            android:id="@+id/etCarbs"
-                            android:hint="Carbs (g)"
-                            android:inputType="number"
-                            android:maxLines="1"
-                            android:imeOptions="actionNext"
-                            android:layout_weight="1"
+                        <com.google.android.material.textfield.TextInputLayout
+                            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                             android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:hint="Carbs"
+                            app:suffixText="g">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/etCarbs"
+                                android:inputType="numberDecimal"
+                                android:maxLines="1"
+                                android:imeOptions="actionNext"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"/>
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <Space
+                            android:layout_width="8dp"
                             android:layout_height="wrap_content"/>
 
-                        <EditText
-                            android:id="@+id/etFat"
-                            android:hint="Fat (g)"
-                            android:inputType="number"
-                            android:maxLines="1"
-                            android:imeOptions="actionDone"
-                            android:layout_weight="1"
+                        <com.google.android.material.textfield.TextInputLayout
+                            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                             android:layout_width="0dp"
-                            android:layout_height="wrap_content"/>
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:hint="Fat"
+                            app:suffixText="g">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/etFat"
+                                android:inputType="numberDecimal"
+                                android:maxLines="1"
+                                android:imeOptions="actionDone"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"/>
+                        </com.google.android.material.textfield.TextInputLayout>
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
@@ -336,7 +372,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"/>
 
-        <!-- List -->
+        <!-- List (inside NestedScrollView) -->
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rvEntries"
             android:layout_marginTop="8dp"
