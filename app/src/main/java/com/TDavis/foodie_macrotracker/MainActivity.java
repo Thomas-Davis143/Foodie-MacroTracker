@@ -706,7 +706,7 @@ public class MainActivity extends AppCompatActivity {
                             .setTitle("Pick a match")
                             .setItems(labels.toArray(new String[0]), (d, which) -> {
                                 NormalizedFoodItem best = show.get(which);
-                                applyChosenFood(best);
+                                applyChosenFood(best, true);
                             })
                             .setNegativeButton("Cancel", (d, w) -> {
                                 btnAdd.setText("Search");
@@ -717,7 +717,7 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 // Single result
-                applyChosenFood(list.get(0));
+                applyChosenFood(list.get(0), true);
             }
 
             @Override
@@ -739,68 +739,61 @@ public class MainActivity extends AppCompatActivity {
         etFat     .setText(p.fat      != null ? String.valueOf(r1(p.fat))     : "");
     }
 
-    private void applyChosenFood(NormalizedFoodItem best) {
-        // Name
+    private void applyChosenFood(NormalizedFoodItem best, boolean fromSearch) {
+        // 1) Name
         String chosenName = ((best.brandName != null && !best.brandName.isEmpty()) ? best.brandName + " " : "")
                 + (best.description != null ? best.description : "");
         chosenName = chosenName.trim();
         if (!chosenName.isEmpty()) etFood.setText(chosenName);
 
-        // Base per-100g for later scaling
+        // 2) Base per-100g for scaling (used by recomputeAndRender)
         if (best.servings != null && best.servings.per100g != null) {
             basePer100g = best.servings.per100g;
         } else {
             basePer100g = new Per100g();
         }
 
-        // Units (gram/oz always present; plus serving/household measures)
+        // 3) Units from API (household measures, grams/oz, etc.)
         unitList = (best.units != null) ? best.units : new ArrayList<>();
 
-        // Mirror EXACT serving that the API returned
-        Double servingGrams = (best.servings != null && best.servings.perServing != null)
+        // 4) Determine serving grams:
+        //    - If API gives grams, use it.
+        //    - If not and this came from the Search button, default to 100g (=> 1 serving = 100g).
+        //    - If barcode and unknown, keep 0 (unknown mass).
+        Double servingGramsFromApi = (best.servings != null && best.servings.perServing != null)
                 ? best.servings.perServing.grams : null;
+        double servingGrams = (servingGramsFromApi != null && servingGramsFromApi > 0)
+                ? servingGramsFromApi
+                : (fromSearch ? 100.0 : 0.0);
 
-        if (servingGrams != null && servingGrams > 0) {
-            // Prefer explicit "serving" unit with qty = 1
-            int servingIdx = findIndexByLabel(unitList, "serving");
-            if (servingIdx >= 0) {
-                setUnitsAdapterAndSelect(servingIdx);
-                etQuantity.setText("1");
-                setMacrosFromPerServing(best.servings.perServing); // exact
-                // do not recompute here; keep exact perServing values
-            } else {
-                // Try a household measure whose grams matches serving grams (±0.6g)
-                int matchIdx = findIndexByGrams(unitList, servingGrams, 0.6);
-                if (matchIdx >= 0) {
-                    setUnitsAdapterAndSelect(matchIdx);
-                    etQuantity.setText("1");
-                    setMacrosFromPerServing(best.servings.perServing);
-                } else {
-                    // Fall back to grams unit with qty = servingGrams
-                    int gramsIdx = indexOfUnitLabelContains("gram");
-                    if (gramsIdx < 0) gramsIdx = 0;
-                    setUnitsAdapterAndSelect(gramsIdx);
-                    etQuantity.setText(formatQtyNice(servingGrams));
-                    setMacrosFromPerServing(best.servings.perServing);
-                }
-            }
+        // 5) Ensure we have a "serving" unit with the grams chosen above
+        ensureServingUnit(servingGrams);
+
+        // 6) Select "serving" and default quantity = 1
+        int servingIdx = findIndexByLabel(unitList, "serving");
+        setUnitsAdapterAndSelect(Math.max(0, servingIdx));
+        etQuantity.setText("1");
+
+        // 7) Populate macros:
+        //    Prefer exact per-serving from API; else synthesize from per-100g using serving grams.
+        if (best.servings != null && best.servings.perServing != null) {
+            setMacrosFromPerServing(best.servings.perServing);
+        } else if (servingIdx >= 0 && unitList.get(servingIdx).gramsPerUnit > 0 && basePer100g != null) {
+            selectedUnit = unitList.get(servingIdx);   // "serving"
+            recomputeAndRender();                      // qty=1 * serving grams (100g if defaulted)
         } else {
-            // No serving grams provided; pick a sensible default and compute from per100g
-            int idx = findIndexByLabel(unitList, "serving");
-            if (idx < 0) {
-                int nonBase = findFirstNonBaseUnit(unitList);
-                idx = (nonBase >= 0) ? nonBase : indexOfUnitLabelContains("gram");
-                if (idx < 0) idx = 0;
-            }
-            setUnitsAdapterAndSelect(idx);
-            etQuantity.setText("1");
-            recomputeAndRender(); // compute for 1 unit from per100g
+            // Unknown mass and no per-serving macros: leave fields as-is; user can pick grams/oz.
+            // Optionally clear:
+            // etCalories.setText(""); etProtein.setText(""); etCarbs.setText(""); etFat.setText("");
         }
 
+        // 8) UX polish
         btnAdd.setText("Add Entry");
         toast("Filled from USDA.");
         updateAddButtonLabel();
     }
+
+
 
     /* ==============================  BARCODE  ============================== */
 
@@ -820,7 +813,7 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
 
-                applyChosenFood(resp.body().item);
+                applyChosenFood(resp.body().item, false);
             }
 
             @Override public void onFailure(Call<BarcodeLookupResponse> call, Throwable t) {
@@ -917,5 +910,20 @@ public class MainActivity extends AppCompatActivity {
 
         dlg.show();
     }
+    /** Ensure unitList has a "serving" unit. If missing and grams>0, insert it at index 0. */
+    private void ensureServingUnit(double servingGramsOrZero) {
+        if (unitList == null) unitList = new ArrayList<>();
+        int idx = findIndexByLabel(unitList, "serving");
+        if (idx < 0) {
+            Unit u = new Unit();
+            u.label = "serving";
+            u.gramsPerUnit = Math.max(0, servingGramsOrZero); // 0 if unknown
+            unitList.add(0, u); // make it the first/default
+        } else if (servingGramsOrZero > 0) {
+            // keep label, but update grams if API told us the serving weight
+            unitList.get(idx).gramsPerUnit = servingGramsOrZero;
+        }
+    }
+
 
 }
