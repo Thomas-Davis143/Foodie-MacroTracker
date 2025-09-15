@@ -9,6 +9,9 @@ import android.widget.RadioGroup;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 
+import android.net.Uri;
+import android.content.Intent;
+
 public class SettingsActivity extends AppCompatActivity {
 
     EditText etGoalCal, etGoalPro, etGoalCar, etGoalFat;
@@ -69,6 +72,25 @@ public class SettingsActivity extends AppCompatActivity {
 
             // Close and return to MainActivity (which refreshes onResume)
             finish();
+        });
+        Button btnCancel = findViewById(R.id.btnCancelSettings);
+        btnCancel.setOnClickListener(v -> {
+            // Optionally: set a canceled result for callers that care
+            setResult(RESULT_CANCELED);
+            finish(); // Close without saving
+        });
+
+        // inside onCreate, after btnSave:
+        Button btnFeedback = findViewById(R.id.btnFeedback);
+        btnFeedback.setOnClickListener(v -> {
+            String url = getString(R.string.feedback_url); // e.g., "https://forms.gle/yourFormId" or "mailto:you@domain.com"
+            Intent intent;
+            if (url.startsWith("mailto:")) {
+                intent = new Intent(Intent.ACTION_SENDTO, Uri.parse(url));
+            } else {
+                intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            }
+            startActivity(intent);
         });
     }
 

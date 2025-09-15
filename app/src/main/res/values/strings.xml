@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Foodie-MacroTracker</string>
+    <string name="feedback_url">https://docs.google.com/forms/d/e/1FAIpQLScknyBvh7vW0nNrWwZL5Ionc11WgPPkJMsDEjtu9b3_jXRtMw/viewform?usp=dialog</string>
 </resources>
