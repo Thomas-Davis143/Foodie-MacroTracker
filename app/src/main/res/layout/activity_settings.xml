@@ -3,11 +3,14 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:background="?attr/colorSurface"
     android:layout_width="match_parent"
+    android:paddingTop="32dp"
+    android:paddingBottom="32dp"
     android:layout_height="match_parent">
 
     <LinearLayout
         android:orientation="vertical"
-        android:padding="16dp"
+        android:paddingLeft="16dp"
+        android:paddingRight="16dp"
         android:layout_width="match_parent"
         android:layout_height="wrap_content">
 
@@ -19,6 +22,13 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"/>
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnFeedback"
+            android:text="Send Feedback"
+            android:layout_marginTop="16dp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            style="?attr/materialButtonStyle"/>
         <!-- Theme -->
         <TextView
             android:text="Theme"
@@ -134,11 +144,29 @@
                 android:layout_height="wrap_content" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnSaveSettings"
-            android:text="Save"
-            android:layout_marginTop="16dp"
+        <!-- Action row: Cancel + Save -->
+        <LinearLayout
+            android:orientation="horizontal"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"/>
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCancelSettings"
+                android:text="Cancel"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"/>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSaveSettings"
+                android:text="Save"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"/>
+        </LinearLayout>
     </LinearLayout>
 </ScrollView>
