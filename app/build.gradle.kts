@@ -16,8 +16,8 @@ android {
         applicationId = "com.TDavis.foodie_macrotracker"
         minSdk = 24
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.0.4"
+        versionCode = 5
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField( "String", "FOOD_PROXY_BASE_URL", "\"https://foodie-macrotracker.onrender.com\"")
