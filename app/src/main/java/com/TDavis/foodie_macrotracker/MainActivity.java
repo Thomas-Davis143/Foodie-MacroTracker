@@ -284,9 +284,9 @@ public class MainActivity extends AppCompatActivity {
     private void addEntry() {
         String name = etFood.getText().toString();
         int cal = parseInt(etCalories.getText().toString());
-        int pro = parseInt(etProtein.getText().toString());
-        int car = parseInt(etCarbs.getText().toString());
-        int fat = parseInt(etFat.getText().toString());
+        int pro = parseIntFromMaybeDecimal(etProtein.getText().toString());
+        int car = parseIntFromMaybeDecimal(etCarbs.getText().toString());
+        int fat = parseIntFromMaybeDecimal(etFat.getText().toString());
 
         if (!validateInputs(name, cal, pro, car, fat)) return;
 
@@ -922,6 +922,17 @@ public class MainActivity extends AppCompatActivity {
         } else if (servingGramsOrZero > 0) {
             // keep label, but update grams if API told us the serving weight
             unitList.get(idx).gramsPerUnit = servingGramsOrZero;
+        }
+    }
+    private int parseIntFromMaybeDecimal(String s) {
+        try {
+            if (s == null) return 0;
+            s = s.trim();
+            if (s.isEmpty()) return 0;
+            double d = Double.parseDouble(s.replace(",", "."));
+            return (int)Math.round(d);
+        } catch (Exception e) {
+            return 0;
         }
     }
 
