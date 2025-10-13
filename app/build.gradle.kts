@@ -3,6 +3,11 @@ plugins {
 }
 
 android {
+    packaging {
+        resources {
+            excludes += listOf("**/dump_syms/**", "**/dump_syms.bin")
+        }
+    }
     android.buildFeatures.buildConfig = true
     namespace = "com.TDavis.foodie_macrotracker"
     compileSdk = 36
@@ -11,8 +16,8 @@ android {
         applicationId = "com.TDavis.foodie_macrotracker"
         minSdk = 24
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.0.3"
+        versionCode = 4
+        versionName = "1.0.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField( "String", "FOOD_PROXY_BASE_URL", "\"https://foodie-macrotracker.onrender.com\"")
